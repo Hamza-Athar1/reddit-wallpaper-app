@@ -26,7 +26,7 @@ import {
   loadFavorites,
   saveFavorites,
 } from "../../components/favorites-storage";
-import { fetchTopImages } from "../../scripts/redditfetch.js";
+import { fetchExtendedWallpapers } from "../../scripts/redditfetch.js";
 
 const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
@@ -69,51 +69,27 @@ export default function HomeScreen() {
     (window.width - IMAGE_MARGIN * (numColumns + 1)) / numColumns
   );
 
-  // Fetch images from all subreddits
+  // Fetch images from all subreddits and all time ranges (multi-subreddit, multi-time, with afterMap)
   const fetchAll = async (reset = false) => {
     setLoading(true);
     setError(null);
     try {
-      // Always get the latest subreddits from storage
       const settings = await import("../../components/settings-storage");
       const loaded = await settings.loadSettings();
       const srList =
         Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
           ? loaded.subreddits
           : subreddits;
-      let allImages: any[] = [];
-      let afterArr: (string | null | undefined)[] = srList.map(() => undefined);
-      let keepLoading = true;
-      let newAfterMap: Record<string, string | null> = {};
-      while (keepLoading) {
-        // Only pass array if all elements are null/undefined or string/null/undefined, else pass undefined
-        let afterParam: any = undefined;
-        if (Array.isArray(afterArr) && afterArr.length > 0) {
-          if (afterArr.every((a) => a == null)) {
-            afterParam = null;
-          } else {
-            afterParam = afterArr.map((a) => (a == null ? null : String(a)));
-          }
-        }
-        const result = await fetchTopImages(srList, {
-          limit: 100,
-          after: afterParam,
+      const timeRanges = [duration];
+      const { images: fetchedImages, after: newAfterMap } =
+        await fetchExtendedWallpapers({
+          subreddits: srList,
+          timeRanges,
+          postType: "top",
+          limit: 50,
+          after: reset ? {} : afterMap,
         });
-        const newImgs = result.images.filter(
-          (img: { id: string }) => !allImages.some((i) => i.id === img.id)
-        );
-        allImages = [...allImages, ...newImgs];
-        // Update after tokens
-        srList.forEach((sr, i) => {
-          newAfterMap[sr] = Array.isArray(result.after)
-            ? result.after[i]
-            : null;
-        });
-        afterArr = srList.map((sr) => newAfterMap[sr] ?? undefined);
-        // Stop if all after tokens are null or no new images
-        keepLoading = afterArr.some((a) => a) && newImgs.length > 0;
-      }
-      setImages(sortImagesByDuration(allImages, duration));
+      setImages(fetchedImages);
       setAfterMap(newAfterMap);
     } catch (e) {
       setError("Failed to load images.");
@@ -128,56 +104,32 @@ export default function HomeScreen() {
     // eslint-disable-next-line
   }, [duration, subreddits.join(",")]);
 
-  // Load more images (pagination)
+  // Load more images (pagination, multi-subreddit, multi-time)
   const loadMore = async () => {
     if (loadingMore) return;
+    if (Object.values(afterMap).every((v) => v == null)) return;
     setLoadingMore(true);
     try {
-      // Get subreddits from storage
       const settings = await import("../../components/settings-storage");
       const loaded = await settings.loadSettings();
       const srList =
         Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
           ? loaded.subreddits
           : subreddits;
-      const afterArr: (string | null | undefined)[] = srList.map(
-        (sr) => afterMap[sr] ?? undefined
-      );
-      let allNewImages: any[] = [];
-      let lmAfterArr: (string | null | undefined)[] = afterArr;
-      let lmAfterMap = { ...afterMap };
-      let keepLoadingMore = true;
-      while (keepLoadingMore) {
-        let lmAfterParam: any = undefined;
-        if (Array.isArray(lmAfterArr) && lmAfterArr.length > 0) {
-          if (lmAfterArr.every((a) => a == null)) {
-            lmAfterParam = null;
-          } else {
-            lmAfterParam = lmAfterArr.map((a) =>
-              a == null ? null : String(a)
-            );
-          }
-        }
-        const result = await fetchTopImages(srList, {
-          limit: 100,
-          after: lmAfterParam,
+      const timeRanges = [duration];
+      const { images: newImages, after: newAfterMap } =
+        await fetchExtendedWallpapers({
+          subreddits: srList,
+          timeRanges,
+          postType: "top",
+          limit: 50,
+          after: afterMap,
         });
-        const prevIds = new Set(images.map((img: { id: string }) => img.id));
-        const newImages = result.images.filter(
-          (img: { id: string }) =>
-            !prevIds.has(img.id) && !allNewImages.some((i) => i.id === img.id)
-        );
-        allNewImages = [...allNewImages, ...newImages];
-        srList.forEach((sr, i) => {
-          lmAfterMap[sr] = Array.isArray(result.after) ? result.after[i] : null;
-        });
-        lmAfterArr = srList.map((sr) => lmAfterMap[sr] ?? undefined);
-        keepLoadingMore = lmAfterArr.some((a) => a) && newImages.length > 0;
-      }
-      setImages((prev) =>
-        sortImagesByDuration([...prev, ...allNewImages], duration)
-      );
-      setAfterMap(lmAfterMap);
+      setImages((prev) => {
+        const ids = new Set(prev.map((i: any) => i.id));
+        return [...prev, ...newImages.filter((i: any) => !ids.has(i.id))];
+      });
+      setAfterMap(newAfterMap);
     } catch (e) {
       // Optionally show error
     } finally {
