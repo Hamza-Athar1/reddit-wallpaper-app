@@ -6,6 +6,8 @@ export type PersistedSettings = {
   isDark: boolean;
   subreddits: string[];
   duration: string;
+  filterByResolution?: boolean;
+  resizeToDevice?: boolean;
 };
 
 export async function saveSettings(settings: PersistedSettings) {

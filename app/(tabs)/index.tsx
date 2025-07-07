@@ -19,6 +19,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { useSettings } from "@/components/SettingsContext";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
 import { useEffect as useLocalEffect, useState as useLocalState } from "react";
 import { Share } from "react-native";
@@ -43,7 +44,13 @@ const DURATION_OPTIONS = [
 
 export default function HomeScreen() {
   const window = useWindowDimensions();
-  const { subreddits, duration, setDuration } = useSettings();
+  const {
+    subreddits,
+    duration,
+    setDuration,
+    filterByResolution,
+    resizeToDevice,
+  } = useSettings();
   type Wallpaper = {
     id: string;
     title: string;
@@ -64,7 +71,7 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useLocalState<string[]>([]);
-
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   // Load favorites from persistent storage on mount
   useLocalEffect(() => {
     (async () => {
@@ -72,7 +79,6 @@ export default function HomeScreen() {
       setFavorites(favs);
     })();
   }, []);
-
   // Save favorites to persistent storage when changed
   useLocalEffect(() => {
     saveFavorites(favorites);
@@ -83,7 +89,6 @@ export default function HomeScreen() {
   const IMAGE_WIDTH = Math.floor(
     (window.width - IMAGE_MARGIN * (numColumns + 1)) / numColumns
   );
-
   // Fetch images from all subreddits and all time ranges (multi-subreddit, multi-time, with afterMap)
   const fetchAll = async (reset = false) => {
     setLoading(true);
@@ -112,13 +117,11 @@ export default function HomeScreen() {
       setLoading(false);
     }
   };
-
   // Initial fetch and on duration/subreddits change
   useEffect(() => {
     fetchAll(true);
     // eslint-disable-next-line
   }, [duration, subreddits.join(",")]);
-
   // Load more images (pagination, multi-subreddit, multi-time)
   const loadMore = async () => {
     if (loadingMore) return;
@@ -152,19 +155,57 @@ export default function HomeScreen() {
     }
   };
 
-  // Download image to device
-  const handleDownload = async (url: string, id: string) => {
+  // Download image to device, optionally resize/crop to device resolution
+  const handleDownload = async (
+    url: string,
+    id: string,
+    width?: number,
+    height?: number
+  ) => {
+    setDownloadingId(id);
     try {
       const filename = url.split("/").pop()?.split("?")[0] || `${id}.jpg`;
-      const fileUri = FileSystem.cacheDirectory + filename;
+      let fileUri = FileSystem.cacheDirectory + filename;
+      let finalUri = fileUri;
+      // Download original image
       const { uri } = await FileSystem.downloadAsync(url, fileUri);
+      // Optionally resize/crop to device resolution
+      if (resizeToDevice && width && height) {
+        const manipResult = await ImageManipulator.manipulateAsync(
+          uri,
+          [
+            {
+              resize: {
+                width: Math.round(window.width),
+                height: Math.round(window.height),
+              },
+            },
+            {
+              crop: {
+                originX: 0,
+                originY: 0,
+                width: Math.round(window.width),
+                height: Math.round(window.height),
+              },
+            },
+          ],
+          { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        finalUri = manipResult.uri;
+      }
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") throw new Error("Permission denied");
-      const asset = await MediaLibrary.createAssetAsync(uri);
-      await MediaLibrary.createAlbumAsync("Reddit Wallpapers", asset, false);
+      const asset = await MediaLibrary.createAssetAsync(finalUri);
+      try {
+        await MediaLibrary.createAlbumAsync("Reddit Wallpapers", asset, false);
+      } catch (err) {
+        // Ignore error if album already exists
+      }
       alert("Image saved to your Photos!");
     } catch (e) {
       alert("Failed to save image: " + e);
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -183,6 +224,15 @@ export default function HomeScreen() {
       prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
     );
   };
+
+  // Filter images by device resolution if enabled
+  const filteredImages = filterByResolution
+    ? images.filter(
+        (img) =>
+          img.width >= Math.round(window.width) &&
+          img.height >= Math.round(window.height)
+      )
+    : images;
 
   return (
     <ParallaxScrollView
@@ -233,7 +283,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             <FlatList
-              data={images}
+              data={filteredImages}
               keyExtractor={(item) => item.id}
               numColumns={numColumns}
               columnWrapperStyle={
@@ -273,14 +323,26 @@ export default function HomeScreen() {
                   </ThemedText>
                   <View style={styles.buttonRow}>
                     <TouchableOpacity
-                      onPress={() => handleDownload(item.url, item.id)}
+                      onPress={() =>
+                        handleDownload(
+                          item.url,
+                          item.id,
+                          item.width,
+                          item.height
+                        )
+                      }
                       accessibilityLabel={`Download wallpaper: ${item.title}`}
+                      disabled={downloadingId === item.id}
                     >
-                      <Ionicons
-                        name="download-outline"
-                        size={22}
-                        color="#0a7ea4"
-                      />
+                      {downloadingId === item.id ? (
+                        <ActivityIndicator size={22} color="#0a7ea4" />
+                      ) : (
+                        <Ionicons
+                          name="download-outline"
+                          size={22}
+                          color="#0a7ea4"
+                        />
+                      )}
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleFavorite(item.id)}

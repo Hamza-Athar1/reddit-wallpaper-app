@@ -32,7 +32,10 @@ export default function SettingsScreen() {
     setIsDark,
     subreddits,
     setSubreddits,
-    // Remove duration and setDuration if not used
+    filterByResolution,
+    setFilterByResolution,
+    resizeToDevice,
+    setResizeToDevice,
   } = useSettings();
 
   // Persist subreddits to AsyncStorage
@@ -166,6 +169,36 @@ export default function SettingsScreen() {
         </View>
         <ThemedText style={styles.note}>
           (This toggle is global. Home page will update instantly.)
+        </ThemedText>
+      </ThemedView>
+      {/* Resolution filter toggle */}
+      <ThemedView style={styles.section}>
+        <ThemedText type="subtitle" style={styles.sectionHeader}>
+          Wallpaper Resolution
+        </ThemedText>
+        <View style={styles.row}>
+          <ThemedText>
+            Show only wallpapers matching or exceeding device resolution
+          </ThemedText>
+          <Switch
+            value={filterByResolution}
+            onValueChange={setFilterByResolution}
+            thumbColor={filterByResolution ? "#0a7ea4" : "#eee"}
+          />
+        </View>
+        <View style={styles.row}>
+          <ThemedText>
+            Resize/crop wallpapers to device resolution on download
+          </ThemedText>
+          <Switch
+            value={resizeToDevice}
+            onValueChange={setResizeToDevice}
+            thumbColor={resizeToDevice ? "#0a7ea4" : "#eee"}
+          />
+        </View>
+        <ThemedText style={styles.note}>
+          (If enabled, downloaded images will be resized/cropped to fit your
+          screen.)
         </ThemedText>
       </ThemedView>
       {/* Subreddit management */}
