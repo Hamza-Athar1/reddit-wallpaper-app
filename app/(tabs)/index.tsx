@@ -44,7 +44,22 @@ const DURATION_OPTIONS = [
 export default function HomeScreen() {
   const window = useWindowDimensions();
   const { subreddits, duration, setDuration } = useSettings();
-  const [images, setImages] = useState<any[]>([]);
+  type Wallpaper = {
+    id: string;
+    title: string;
+    url: string;
+    width: number;
+    height: number;
+    preview: string | null;
+    subreddit?: string;
+    time?: string;
+    postType?: string;
+    created_utc?: number;
+    score?: number;
+    author?: string;
+    permalink?: string;
+  };
+  const [images, setImages] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +104,7 @@ export default function HomeScreen() {
           limit: 50,
           after: reset ? {} : afterMap,
         });
-      setImages(fetchedImages);
+      setImages(Array.isArray(fetchedImages) ? fetchedImages : []);
       setAfterMap(newAfterMap);
     } catch (e) {
       setError("Failed to load images.");
@@ -126,8 +141,8 @@ export default function HomeScreen() {
           after: afterMap,
         });
       setImages((prev) => {
-        const ids = new Set(prev.map((i: any) => i.id));
-        return [...prev, ...newImages.filter((i: any) => !ids.has(i.id))];
+        const ids = new Set(prev.map((i) => i.id));
+        return [...prev, ...newImages.filter((i) => !ids.has(i.id))];
       });
       setAfterMap(newAfterMap);
     } catch (e) {
@@ -212,79 +227,102 @@ export default function HomeScreen() {
 
       {!loading && !error && (
         <>
-          <FlatList
-            data={images}
-            keyExtractor={(item) => item.id}
-            numColumns={numColumns}
-            columnWrapperStyle={
-              numColumns > 1 ? { gap: IMAGE_MARGIN } : undefined
-            }
-            contentContainerStyle={{ gap: IMAGE_MARGIN, padding: IMAGE_MARGIN }}
-            renderItem={({ item }) => (
-              <View
-                style={{
-                  width: IMAGE_WIDTH,
-                  marginBottom: IMAGE_MARGIN,
-                  alignSelf: numColumns === 1 ? "center" : undefined,
-                }}
-              >
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={{ borderRadius: 12, overflow: "hidden" }}
+          {images.length === 0 ? (
+            <View style={styles.centered}>
+              <ThemedText>No wallpapers found.</ThemedText>
+            </View>
+          ) : (
+            <FlatList
+              data={images}
+              keyExtractor={(item) => item.id}
+              numColumns={numColumns}
+              columnWrapperStyle={
+                numColumns > 1 ? { gap: IMAGE_MARGIN } : undefined
+              }
+              contentContainerStyle={{
+                gap: IMAGE_MARGIN,
+                padding: IMAGE_MARGIN,
+              }}
+              renderItem={({ item }) => (
+                <View
+                  style={{
+                    width: IMAGE_WIDTH,
+                    marginBottom: IMAGE_MARGIN,
+                    alignSelf: numColumns === 1 ? "center" : undefined,
+                  }}
                 >
-                  <Image
-                    source={{ uri: item.url }}
-                    style={{
-                      width: IMAGE_WIDTH,
-                      height: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO,
-                      borderRadius: 12,
-                      backgroundColor: "#eee",
-                    }}
-                    contentFit="cover"
-                    transition={300}
-                  />
-                </TouchableOpacity>
-                <ThemedText numberOfLines={2} style={styles.imageTitle}>
-                  {item.title}
-                </ThemedText>
-                <View style={styles.buttonRow}>
                   <TouchableOpacity
-                    onPress={() => handleDownload(item.url, item.id)}
+                    activeOpacity={0.8}
+                    style={{ borderRadius: 12, overflow: "hidden" }}
+                    accessibilityLabel={`View wallpaper: ${item.title}`}
                   >
-                    <Ionicons
-                      name="download-outline"
-                      size={22}
-                      color="#0a7ea4"
+                    <Image
+                      source={{ uri: item.url }}
+                      style={{
+                        width: IMAGE_WIDTH,
+                        height: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO,
+                        borderRadius: 12,
+                        backgroundColor: "#eee",
+                      }}
+                      contentFit="cover"
+                      transition={300}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleFavorite(item.id)}>
-                    <Ionicons
-                      name={
-                        favorites.includes(item.id) ? "heart" : "heart-outline"
-                      }
-                      size={22}
-                      color={
-                        favorites.includes(item.id) ? "#e74c3c" : "#0a7ea4"
-                      }
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleShare(item.url)}>
-                    <Ionicons
-                      name="share-social-outline"
-                      size={22}
-                      color="#0a7ea4"
-                    />
-                  </TouchableOpacity>
+                  <ThemedText numberOfLines={2} style={styles.imageTitle}>
+                    {item.title}
+                  </ThemedText>
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      onPress={() => handleDownload(item.url, item.id)}
+                      accessibilityLabel={`Download wallpaper: ${item.title}`}
+                    >
+                      <Ionicons
+                        name="download-outline"
+                        size={22}
+                        color="#0a7ea4"
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleFavorite(item.id)}
+                      accessibilityLabel={`$${
+                        favorites.includes(item.id) ? "Unfavorite" : "Favorite"
+                      } wallpaper: ${item.title}`}
+                    >
+                      <Ionicons
+                        name={
+                          favorites.includes(item.id)
+                            ? "heart"
+                            : "heart-outline"
+                        }
+                        size={22}
+                        color={
+                          favorites.includes(item.id) ? "#e74c3c" : "#0a7ea4"
+                        }
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleShare(item.url)}
+                      accessibilityLabel={`Share wallpaper: ${item.title}`}
+                    >
+                      <Ionicons
+                        name="share-social-outline"
+                        size={22}
+                        color="#0a7ea4"
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            )}
-            // Remove infinite scroll trigger
-            // onEndReached={loadMore}
-            // onEndReachedThreshold={0.5}
-            ListFooterComponent={
-              loadingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null
-            }
-          />
+              )}
+              removeClippedSubviews
+              initialNumToRender={8}
+              windowSize={11}
+              ListFooterComponent={
+                loadingMore ? (
+                  <ActivityIndicator style={{ margin: 16 }} />
+                ) : null
+              }
+            />
+          )}
           <View style={{ alignItems: "center", marginVertical: 16 }}>
             <TouchableOpacity
               onPress={loadMore}
@@ -297,6 +335,7 @@ export default function HomeScreen() {
                 opacity: loadingMore ? 0.6 : 1,
               }}
               disabled={loadingMore}
+              accessibilityLabel="Load more wallpapers"
             >
               <ThemedText
                 style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
