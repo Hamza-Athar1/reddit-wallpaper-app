@@ -159,7 +159,7 @@ import {
   loadFavorites,
   saveFavorites,
 } from "../../components/favorites-storage";
-import { fetchExtendedWallpapers } from "../../scripts/redditfetch.js";
+import fetchExtendedWallpapers from "../../scripts/redditfetch.js";
 
 const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
