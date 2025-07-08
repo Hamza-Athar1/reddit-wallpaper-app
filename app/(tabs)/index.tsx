@@ -33,7 +33,7 @@ type WallpaperItemProps = {
 };
 
 // WallpaperItem component to allow hooks usage per item
-function WallpaperItem({
+const WallpaperItem = React.memo(function WallpaperItem({
   item,
   IMAGE_WIDTH,
   IMAGE_HEIGHT_RATIO,
@@ -135,7 +135,7 @@ function WallpaperItem({
       </View>
     </View>
   );
-}
+});
 // If you see a module error, run: npm install @react-native-picker/picker
 import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
@@ -499,12 +499,19 @@ export default function HomeScreen() {
                 )}
                 removeClippedSubviews={true}
                 initialNumToRender={6}
-                windowSize={7}
+                windowSize={11}
+                maxToRenderPerBatch={8}
+                updateCellsBatchingPeriod={16}
                 ListFooterComponent={
                   loadingMore ? (
                     <ActivityIndicator style={{ margin: 16 }} />
                   ) : null
                 }
+                getItemLayout={(_, index) => ({
+                  length: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 70,
+                  offset: (IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 70) * index,
+                  index,
+                })}
               />
             )}
             <View style={{ alignItems: "center", marginVertical: 16 }}>
