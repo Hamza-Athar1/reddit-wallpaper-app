@@ -422,10 +422,8 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: "#23272e", // dark dropdown
     borderRadius: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    // boxShadow for web compatibility, replaces shadow* props
+    boxShadow: "0px 4px 12px rgba(0,0,0,0.16)",
     elevation: 20, // much higher z-index
     zIndex: 100,
     paddingVertical: 4,

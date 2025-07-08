@@ -159,7 +159,7 @@ import {
   loadFavorites,
   saveFavorites,
 } from "../../components/favorites-storage";
-import fetchExtendedWallpapers from "../../scripts/redditfetch.js";
+import { fetchExtendedWallpapers } from "../../scripts/redditfetch.js";
 
 const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
@@ -204,6 +204,9 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useLocalState<string[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  // For UX: only show a limited number of images at a time
+  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   // Load favorites from persistent storage on mount
   useLocalEffect(() => {
     (async () => {
@@ -252,6 +255,7 @@ export default function HomeScreen() {
   // Initial fetch and on duration/subreddits change
   useEffect(() => {
     fetchAll(true);
+    setVisibleCount(PAGE_SIZE);
     // eslint-disable-next-line
   }, [duration, subreddits.join(",")]);
   // Load more images (pagination, multi-subreddit, multi-time)
@@ -280,6 +284,7 @@ export default function HomeScreen() {
         return [...prev, ...newImages.filter((i: Wallpaper) => !ids.has(i.id))];
       });
       setAfterMap(newAfterMap);
+      setVisibleCount((prev) => Math.max(prev, PAGE_SIZE));
     } catch (e) {
       // Optionally show error
     } finally {
@@ -365,6 +370,8 @@ export default function HomeScreen() {
           img.height >= Math.round(window.height)
       )
     : images;
+  // Only show up to visibleCount images
+  const pagedImages = filteredImages.slice(0, visibleCount);
 
   return (
     <ParallaxScrollView
@@ -380,7 +387,7 @@ export default function HomeScreen() {
         <ThemedText type="title">Reddit Wallpapers</ThemedText>
       </ThemedView>
       {/* Duration filter as dropdown */}
-      <View style={styles.pickerRow}>
+      <View style={[styles.pickerRow, { paddingTop: 16, paddingBottom: 16 }]}>
         <Picker
           selectedValue={duration}
           onValueChange={(val) => setDuration(val)}
@@ -415,7 +422,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             <FlatList
-              data={filteredImages}
+              data={pagedImages}
               keyExtractor={(item) => item.id}
               numColumns={numColumns}
               columnWrapperStyle={
@@ -439,8 +446,8 @@ export default function HomeScreen() {
                 />
               )}
               removeClippedSubviews={true}
-              initialNumToRender={8}
-              windowSize={11}
+              initialNumToRender={6}
+              windowSize={7}
               ListFooterComponent={
                 loadingMore ? (
                   <ActivityIndicator style={{ margin: 16 }} />
@@ -449,25 +456,28 @@ export default function HomeScreen() {
             />
           )}
           <View style={{ alignItems: "center", marginVertical: 16 }}>
-            <TouchableOpacity
-              onPress={loadMore}
-              style={{
-                backgroundColor: "#0a7ea4",
-                borderRadius: 8,
-                paddingHorizontal: 24,
-                paddingVertical: 12,
-                marginTop: 8,
-                opacity: loadingMore ? 0.6 : 1,
-              }}
-              disabled={loadingMore}
-              accessibilityLabel="Load more wallpapers"
-            >
-              <ThemedText
-                style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
+            {/* Show Load More button for paged images */}
+            {visibleCount < filteredImages.length && (
+              <TouchableOpacity
+                onPress={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                style={{
+                  backgroundColor: "#0a7ea4",
+                  borderRadius: 8,
+                  paddingHorizontal: 24,
+                  paddingVertical: 12,
+                  marginTop: 8,
+                  opacity: loadingMore ? 0.6 : 1,
+                }}
+                disabled={loadingMore}
+                accessibilityLabel="Load more wallpapers"
               >
-                {loadingMore ? "Loading..." : "Load More Wallpapers"}
-              </ThemedText>
-            </TouchableOpacity>
+                <ThemedText
+                  style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
+                >
+                  {loadingMore ? "Loading..." : "Load More Wallpapers"}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
           </View>
         </>
       )}
@@ -481,6 +491,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 16,
+    // If you want a shadow, use boxShadow for web compatibility
+    // boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
   },
   reactLogo: {
     height: 178,
@@ -488,6 +500,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: "absolute",
+    // boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
   },
   centered: {
     alignItems: "center",
@@ -506,6 +519,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 2,
     gap: 12,
+    // boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
   },
   pickerRow: {
     marginBottom: 8,

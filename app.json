@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "reddit-wallpaper-app",
+    "name": "WallIt",
     "slug": "reddit-wallpaper-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/wall.png",
     "scheme": "redditwallpaperapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
