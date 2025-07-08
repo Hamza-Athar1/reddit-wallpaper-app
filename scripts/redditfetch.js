@@ -13,7 +13,7 @@ export async function fetchExtendedWallpapers({
   timeRanges = ["week"],
   postType = "top",
   limit = 50,
-  after = {},
+  after = {}
 } = {}) {
   const allImages = [];
   const afterTokens = {};
@@ -137,6 +137,7 @@ export async function fetchTopImages(subreddits, { limit = 50, time = 'week', af
   }
 }
 
+
 // Fetch wallpapers from saved subreddits in persistent storage
 export async function fetchSavedSubredditsWallpapers(options = {}) {
   const settings = await loadSettings();
@@ -146,4 +147,4 @@ export async function fetchSavedSubredditsWallpapers(options = {}) {
   return fetchTopImages(subreddits, options);
 }
 
-// (Removed duplicate export to fix SyntaxError)
+

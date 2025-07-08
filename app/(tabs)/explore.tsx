@@ -27,16 +27,8 @@ const DURATION_OPTIONS = [
 ];
 
 export default function SettingsScreen() {
-  const {
-    isDark,
-    setIsDark,
-    subreddits,
-    setSubreddits,
-    filterByResolution,
-    setFilterByResolution,
-    resizeToDevice,
-    setResizeToDevice,
-  } = useSettings();
+  const { subreddits, setSubreddits, resizeToDevice, setResizeToDevice } =
+    useSettings();
 
   // Persist subreddits to AsyncStorage
   React.useEffect(() => {
@@ -153,39 +145,12 @@ export default function SettingsScreen() {
       <ThemedView style={styles.titleContainer}>
         <ThemedText type="title">Settings</ThemedText>
       </ThemedView>
-      {/* Theme toggle */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionHeader}>
-          Theme
-        </ThemedText>
-        <View style={styles.row}>
-          <ThemedText>Light</ThemedText>
-          <Switch
-            value={isDark}
-            onValueChange={setIsDark}
-            thumbColor={isDark ? "#222" : "#eee"}
-          />
-          <ThemedText>Dark</ThemedText>
-        </View>
-        <ThemedText style={styles.note}>
-          (This toggle is global. Home page will update instantly.)
-        </ThemedText>
-      </ThemedView>
-      {/* Resolution filter toggle */}
+
+      {/* Resolution download toggle only */}
       <ThemedView style={styles.section}>
         <ThemedText type="subtitle" style={styles.sectionHeader}>
           Wallpaper Resolution
         </ThemedText>
-        <View style={styles.row}>
-          <ThemedText>
-            Show only wallpapers matching or exceeding device resolution
-          </ThemedText>
-          <Switch
-            value={filterByResolution}
-            onValueChange={setFilterByResolution}
-            thumbColor={filterByResolution ? "#0a7ea4" : "#eee"}
-          />
-        </View>
         <View style={styles.row}>
           <ThemedText>
             Resize/crop wallpapers to device resolution on download

@@ -57,6 +57,10 @@ function WallpaperItem({
         activeOpacity={0.8}
         style={{ borderRadius: 12, overflow: "hidden" }}
         accessibilityLabel={`View wallpaper: ${item.title}`}
+        onPress={() => {
+          setPreviewUrl(item.url);
+          setPreviewVisible(true);
+        }}
       >
         <View style={{ position: "relative" }}>
           <Image
@@ -65,13 +69,15 @@ function WallpaperItem({
               width: IMAGE_WIDTH,
               height: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO,
               borderRadius: 12,
-              backgroundColor: "#eee",
+              backgroundColor: imgLoading ? "#000" : "#111",
             }}
             contentFit="cover"
             transition={300}
             onLoadStart={() => setImgLoading(true)}
             onLoadEnd={() => setImgLoading(false)}
+            // Use low-res preview if available, else fallback to blurred main image
             placeholder={item.preview ? { uri: item.preview } : undefined}
+            placeholderContentFit="cover"
           />
           {imgLoading && (
             <View
@@ -83,7 +89,7 @@ function WallpaperItem({
                 height: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO,
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: "#eee",
+                backgroundColor: "#000",
               }}
             >
               <ActivityIndicator size={32} color="#0a7ea4" />
@@ -159,7 +165,8 @@ import {
   loadFavorites,
   saveFavorites,
 } from "../../components/favorites-storage";
-import { fetchExtendedWallpapers } from "../../scripts/redditfetch.js";
+import { fetchExtendedWallpapers } from "../../scripts/redditfetch";
+import ImagePreviewModal from "../ImagePreviewModal";
 
 const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
@@ -204,6 +211,8 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useLocalState<string[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // For UX: only show a limited number of images at a time
   const PAGE_SIZE = 6;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -217,7 +226,13 @@ export default function HomeScreen() {
   // Save favorites to persistent storage when changed
   useLocalEffect(() => {
     saveFavorites(favorites);
-  }, [favorites]);
+    // Also persist all currently loaded wallpapers for the Favorites tab
+    if (images.length > 0) {
+      try {
+        localStorage.setItem("user-wallpapers", JSON.stringify(images));
+      } catch {}
+    }
+  }, [favorites, images]);
   const [afterMap, setAfterMap] = useState<Record<string, string | null>>({});
   // Responsive columns: 1 column for small screens, 2 for larger
   const numColumns = window.width < 500 ? 1 : 2;
@@ -374,114 +389,157 @@ export default function HomeScreen() {
   const pagedImages = filteredImages.slice(0, visibleCount);
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
-      headerImage={
-        <Image
-          source={require("@/assets/images/partial-react-logo.png")}
-          style={styles.reactLogo}
-        />
-      }
-    >
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Reddit Wallpapers</ThemedText>
-      </ThemedView>
-      {/* Duration filter as dropdown */}
-      <View style={[styles.pickerRow, { paddingTop: 16, paddingBottom: 16 }]}>
-        <Picker
-          selectedValue={duration}
-          onValueChange={(val) => setDuration(val)}
-          style={styles.picker}
-          itemStyle={styles.pickerItem}
-          dropdownIconColor="#0a7ea4"
-          enabled={true}
+    <>
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
+        headerImage={
+          <Image
+            source={require("@/assets/images/partial-react-logo.png")}
+            style={styles.reactLogo}
+          />
+        }
+      >
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Reddit Wallpapers</ThemedText>
+        </ThemedView>
+        {/* Duration filter as dropdown */}
+        <View
+          style={[
+            styles.pickerRow,
+            {
+              paddingTop: 16,
+              paddingBottom: 16,
+              backgroundColor: "#23272e",
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "#444",
+              marginHorizontal: 12,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+              elevation: 8,
+            },
+          ]}
         >
-          {DURATION_OPTIONS.map((opt) => (
-            <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
-          ))}
-        </Picker>
-      </View>
-
-      {loading && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" />
+          <Picker
+            selectedValue={duration}
+            onValueChange={(val) => setDuration(val)}
+            style={[
+              styles.picker,
+              {
+                color: "#fff",
+                backgroundColor: "transparent",
+                fontWeight: "bold",
+                fontSize: 18,
+                borderRadius: 12,
+              },
+            ]}
+            itemStyle={[
+              styles.pickerItem,
+              { color: "#000", fontWeight: "bold", fontSize: 18 },
+            ]}
+            dropdownIconColor="#0a7ea4"
+            enabled={true}
+            mode="dropdown"
+          >
+            {DURATION_OPTIONS.map((opt) => (
+              <Picker.Item
+                key={opt.value}
+                label={opt.label}
+                value={opt.value}
+                color="#000"
+              />
+            ))}
+          </Picker>
         </View>
-      )}
 
-      {error && (
-        <View style={styles.centered}>
-          <ThemedText>{error}</ThemedText>
-        </View>
-      )}
-
-      {!loading && !error && (
-        <>
-          {images.length === 0 ? (
-            <View style={styles.centered}>
-              <ThemedText>No wallpapers found.</ThemedText>
-            </View>
-          ) : (
-            <FlatList
-              data={pagedImages}
-              keyExtractor={(item) => item.id}
-              numColumns={numColumns}
-              columnWrapperStyle={
-                numColumns > 1 ? { gap: IMAGE_MARGIN } : undefined
-              }
-              contentContainerStyle={{
-                gap: IMAGE_MARGIN,
-                padding: IMAGE_MARGIN,
-              }}
-              renderItem={({ item }) => (
-                <WallpaperItem
-                  item={item}
-                  IMAGE_WIDTH={IMAGE_WIDTH}
-                  IMAGE_HEIGHT_RATIO={IMAGE_HEIGHT_RATIO}
-                  numColumns={numColumns}
-                  handleDownload={handleDownload}
-                  downloadingId={downloadingId}
-                  handleFavorite={handleFavorite}
-                  favorites={favorites}
-                  handleShare={handleShare}
-                />
-              )}
-              removeClippedSubviews={true}
-              initialNumToRender={6}
-              windowSize={7}
-              ListFooterComponent={
-                loadingMore ? (
-                  <ActivityIndicator style={{ margin: 16 }} />
-                ) : null
-              }
-            />
-          )}
-          <View style={{ alignItems: "center", marginVertical: 16 }}>
-            {/* Show Load More button for paged images */}
-            {visibleCount < filteredImages.length && (
-              <TouchableOpacity
-                onPress={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                style={{
-                  backgroundColor: "#0a7ea4",
-                  borderRadius: 8,
-                  paddingHorizontal: 24,
-                  paddingVertical: 12,
-                  marginTop: 8,
-                  opacity: loadingMore ? 0.6 : 1,
-                }}
-                disabled={loadingMore}
-                accessibilityLabel="Load more wallpapers"
-              >
-                <ThemedText
-                  style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
-                >
-                  {loadingMore ? "Loading..." : "Load More Wallpapers"}
-                </ThemedText>
-              </TouchableOpacity>
-            )}
+        {loading && (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" />
           </View>
-        </>
-      )}
-    </ParallaxScrollView>
+        )}
+
+        {error && (
+          <View style={styles.centered}>
+            <ThemedText>{error}</ThemedText>
+          </View>
+        )}
+
+        {!loading && !error && (
+          <>
+            {images.length === 0 ? (
+              <View style={styles.centered}>
+                <ThemedText>No wallpapers found.</ThemedText>
+              </View>
+            ) : (
+              <FlatList
+                data={pagedImages}
+                keyExtractor={(item) => item.id}
+                numColumns={numColumns}
+                columnWrapperStyle={
+                  numColumns > 1 ? { gap: IMAGE_MARGIN } : undefined
+                }
+                contentContainerStyle={{
+                  gap: IMAGE_MARGIN,
+                  padding: IMAGE_MARGIN,
+                }}
+                renderItem={({ item }) => (
+                  <WallpaperItem
+                    item={item}
+                    IMAGE_WIDTH={IMAGE_WIDTH}
+                    IMAGE_HEIGHT_RATIO={IMAGE_HEIGHT_RATIO}
+                    numColumns={numColumns}
+                    handleDownload={handleDownload}
+                    downloadingId={downloadingId}
+                    handleFavorite={handleFavorite}
+                    favorites={favorites}
+                    handleShare={handleShare}
+                  />
+                )}
+                removeClippedSubviews={true}
+                initialNumToRender={6}
+                windowSize={7}
+                ListFooterComponent={
+                  loadingMore ? (
+                    <ActivityIndicator style={{ margin: 16 }} />
+                  ) : null
+                }
+              />
+            )}
+            <View style={{ alignItems: "center", marginVertical: 16 }}>
+              {/* Show Load More button for paged images */}
+              {visibleCount < filteredImages.length && (
+                <TouchableOpacity
+                  onPress={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                  style={{
+                    backgroundColor: "#0a7ea4",
+                    borderRadius: 8,
+                    paddingHorizontal: 24,
+                    paddingVertical: 12,
+                    marginTop: 8,
+                    opacity: loadingMore ? 0.6 : 1,
+                  }}
+                  disabled={loadingMore}
+                  accessibilityLabel="Load more wallpapers"
+                >
+                  <ThemedText
+                    style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
+                  >
+                    {loadingMore ? "Loading..." : "Load More Wallpapers"}
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
+            </View>
+          </>
+        )}
+      </ParallaxScrollView>
+      <ImagePreviewModal
+        visible={previewVisible}
+        imageUrl={previewUrl}
+        onClose={() => setPreviewVisible(false)}
+      />
+    </>
   );
 }
 
@@ -491,8 +549,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 16,
-    // If you want a shadow, use boxShadow for web compatibility
-    // boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    // boxShadow: "0 2px 8px rgba(0,0,0,0.08)", // Use boxShadow for web
   },
   reactLogo: {
     height: 178,
@@ -500,7 +557,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: "absolute",
-    // boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
+    // boxShadow: "0 4px 24px rgba(0,0,0,0.12)", // Use boxShadow for web
   },
   centered: {
     alignItems: "center",
@@ -519,7 +576,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 2,
     gap: 12,
-    // boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+    // boxShadow: "0 1px 4px rgba(0,0,0,0.10)", // Use boxShadow for web
   },
   pickerRow: {
     marginBottom: 8,
