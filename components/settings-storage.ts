@@ -8,6 +8,11 @@ export type PersistedSettings = {
   duration: string;
   filterByResolution?: boolean;
   resizeToDevice?: boolean;
+  sortOrder?: string;
+  sfwOnly?: boolean;
+  autoRefresh?: boolean;
+  showDetails?: boolean;
+  gridView?: boolean;
 };
 
 export async function saveSettings(settings: PersistedSettings) {

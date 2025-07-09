@@ -1,17 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import React, { memo } from "react";
+import React from "react";
 import { Modal, StyleSheet, TouchableOpacity, View } from "react-native";
 
-export default memo(function ImagePreviewModal({
+export default function ImagePreviewModal({
+  url,
   visible,
-  imageUrl,
   onClose,
 }: {
+  url: string | null;
   visible: boolean;
-  imageUrl: string | null;
   onClose: () => void;
 }) {
+  if (!url) return null;
   return (
     <Modal
       visible={visible}
@@ -27,30 +28,41 @@ export default memo(function ImagePreviewModal({
         >
           <Ionicons name="close" size={32} color="#fff" />
         </TouchableOpacity>
-        {imageUrl && (
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.imageTouchable}
+          onPress={onClose}
+        >
           <Image
-            source={{ uri: imageUrl }}
+            source={{ uri: url }}
             style={styles.image}
             contentFit="contain"
-            transition={300}
-            cachePolicy="memory-disk"
           />
-        )}
+        </TouchableOpacity>
       </View>
     </Modal>
   );
-});
+}
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.96)",
+    backgroundColor: "rgba(0,0,0,0.95)",
     justifyContent: "center",
     alignItems: "center",
   },
-  image: {
-    width: "96%",
+  imageTouchable: {
+    width: "90%",
     height: "80%",
+    borderRadius: 16,
+    backgroundColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  image: {
+    width: "100%",
+    height: "100%",
     borderRadius: 16,
     backgroundColor: "#000",
   },
@@ -60,7 +72,7 @@ const styles = StyleSheet.create({
     right: 32,
     zIndex: 10,
     backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 4,
   },
 });

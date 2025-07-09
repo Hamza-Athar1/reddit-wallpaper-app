@@ -2,7 +2,6 @@ import React from "react";
 import {
   ScrollView,
   StyleSheet,
-  Switch,
   TextInput,
   TouchableOpacity,
   View,
@@ -27,8 +26,13 @@ const DURATION_OPTIONS = [
 ];
 
 export default function SettingsScreen() {
-  const { subreddits, setSubreddits, resizeToDevice, setResizeToDevice } =
-    useSettings();
+  const { subreddits, setSubreddits } = useSettings();
+  // New settings state
+  const [sortOrder, setSortOrder] = React.useState("top");
+  const [sfwOnly, setSfwOnly] = React.useState(true);
+  const [autoRefresh, setAutoRefresh] = React.useState(true);
+  const [showDetails, setShowDetails] = React.useState(true);
+  const [gridView, setGridView] = React.useState(true);
 
   // Persist subreddits to AsyncStorage
   React.useEffect(() => {
@@ -146,27 +150,124 @@ export default function SettingsScreen() {
         <ThemedText type="title">Settings</ThemedText>
       </ThemedView>
 
-      {/* Resolution download toggle only */}
+      {/* Sort Order */}
       <ThemedView style={styles.section}>
         <ThemedText type="subtitle" style={styles.sectionHeader}>
-          Wallpaper Resolution
+          Default Sort Order
         </ThemedText>
         <View style={styles.row}>
-          <ThemedText>
-            Resize/crop wallpapers to device resolution on download
-          </ThemedText>
-          <Switch
-            value={resizeToDevice}
-            onValueChange={setResizeToDevice}
-            thumbColor={resizeToDevice ? "#0a7ea4" : "#eee"}
-          />
+          <TouchableOpacity
+            style={[
+              styles.durationPill,
+              sortOrder === "top" && styles.durationPillActive,
+            ]}
+            onPress={() => setSortOrder("top")}
+          >
+            <ThemedText
+              style={{ color: sortOrder === "top" ? "#fff" : "#0a7ea4" }}
+            >
+              Top
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.durationPill,
+              sortOrder === "new" && styles.durationPillActive,
+            ]}
+            onPress={() => setSortOrder("new")}
+          >
+            <ThemedText
+              style={{ color: sortOrder === "new" ? "#fff" : "#0a7ea4" }}
+            >
+              New
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.durationPill,
+              sortOrder === "hot" && styles.durationPillActive,
+            ]}
+            onPress={() => setSortOrder("hot")}
+          >
+            <ThemedText
+              style={{ color: sortOrder === "hot" ? "#fff" : "#0a7ea4" }}
+            >
+              Hot
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.durationPill,
+              sortOrder === "rising" && styles.durationPillActive,
+            ]}
+            onPress={() => setSortOrder("rising")}
+          >
+            <ThemedText
+              style={{ color: sortOrder === "rising" ? "#fff" : "#0a7ea4" }}
+            >
+              Rising
+            </ThemedText>
+          </TouchableOpacity>
         </View>
-        <ThemedText style={styles.note}>
-          (If enabled, downloaded images will be resized/cropped to fit your
-          screen.)
-        </ThemedText>
       </ThemedView>
-      {/* Subreddit management */}
+
+      {/* SFW Filter, Auto-Refresh, Show Details, Grid/List View */}
+      <ThemedView style={styles.section}>
+        <ThemedText type="subtitle" style={styles.sectionHeader}>
+          Preferences
+        </ThemedText>
+        <View style={styles.row}>
+          <ThemedText>Safe for Work Only</ThemedText>
+          <TouchableOpacity
+            style={[styles.durationPill, sfwOnly && styles.durationPillActive]}
+            onPress={() => setSfwOnly((v) => !v)}
+          >
+            <ThemedText style={{ color: sfwOnly ? "#fff" : "#0a7ea4" }}>
+              {sfwOnly ? "On" : "Off"}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.row}>
+          <ThemedText>Auto-Refresh on App Open</ThemedText>
+          <TouchableOpacity
+            style={[
+              styles.durationPill,
+              autoRefresh && styles.durationPillActive,
+            ]}
+            onPress={() => setAutoRefresh((v) => !v)}
+          >
+            <ThemedText style={{ color: autoRefresh ? "#fff" : "#0a7ea4" }}>
+              {autoRefresh ? "On" : "Off"}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.row}>
+          <ThemedText>Show Wallpaper Details</ThemedText>
+          <TouchableOpacity
+            style={[
+              styles.durationPill,
+              showDetails && styles.durationPillActive,
+            ]}
+            onPress={() => setShowDetails((v) => !v)}
+          >
+            <ThemedText style={{ color: showDetails ? "#fff" : "#0a7ea4" }}>
+              {showDetails ? "On" : "Off"}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.row}>
+          <ThemedText>Grid View</ThemedText>
+          <TouchableOpacity
+            style={[styles.durationPill, gridView && styles.durationPillActive]}
+            onPress={() => setGridView((v) => !v)}
+          >
+            <ThemedText style={{ color: gridView ? "#fff" : "#0a7ea4" }}>
+              {gridView ? "On" : "Off"}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+
       <ThemedView style={styles.section}>
         <ThemedText type="subtitle" style={styles.sectionHeader}>
           Subreddits
@@ -195,8 +296,17 @@ export default function SettingsScreen() {
           {/* Add button can be removed if not needed */}
           {(showSuggestions || newSubreddit.length > 1) &&
             suggestions.length > 0 && (
-              <View style={styles.suggestionDropdown}>
-                <ScrollView style={{ maxHeight: 220 }}>
+              <View
+                style={[
+                  styles.suggestionDropdown,
+                  { maxHeight: 480, bottom: undefined, top: 44 },
+                ]}
+              >
+                <ScrollView
+                  style={{ maxHeight: 480 }}
+                  contentContainerStyle={{ flexGrow: 1 }}
+                  keyboardShouldPersistTaps="handled"
+                >
                   {suggestions.map((sub: SubredditSuggestion) => (
                     <TouchableOpacity
                       key={sub.name}
@@ -293,6 +403,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     backgroundColor: "#23272e", // dark background
+    overflow: "hidden",
   },
   sectionHeader: {
     marginBottom: 8,
@@ -305,6 +416,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginVertical: 8,
+    flexWrap: "wrap",
   },
   input: {
     flex: 1,

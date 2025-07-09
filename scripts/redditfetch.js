@@ -8,12 +8,12 @@
  * @param {Object} [params.after] - Optional. Object mapping `${subreddit}_${time}` to "after" tokens.
  * @returns {Promise<{images: any[], after: Record<string, string|null>}>}
  */
-export async function fetchExtendedWallpapers({
+async function fetchExtendedWallpapers({
   subreddits = [],
   timeRanges = ["week"],
   postType = "top",
   limit = 50,
-  after = {}
+  after = {},
 } = {}) {
   const allImages = [];
   const afterTokens = {};
@@ -88,6 +88,7 @@ export async function fetchExtendedWallpapers({
 
   return { images: dedupedImages, after: afterTokens };
 }
+export default fetchExtendedWallpapers;
 import { loadSettings } from "../components/settings-storage";
 
 export async function fetchTopImages(subreddits, { limit = 50, time = 'week', after = null } = {}) {
@@ -146,5 +147,4 @@ export async function fetchSavedSubredditsWallpapers(options = {}) {
     : ["wallpapers"];
   return fetchTopImages(subreddits, options);
 }
-
 

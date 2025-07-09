@@ -1,3 +1,35 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { Picker } from "@react-native-picker/picker";
+import * as FileSystem from "expo-file-system";
+import { Image as ExpoImage } from "expo-image";
+import * as MediaLibrary from "expo-media-library";
+import React, {
+  useEffect,
+  useEffect as useLocalEffect,
+  useState as useLocalState,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image as RNImage,
+  Share,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import {
+  loadFavorites,
+  saveFavorites,
+} from "../../components/favorites-storage";
+import { useSettings } from "../../components/SettingsContext";
+import { ThemedText } from "../../components/ThemedText";
+import { ThemedView } from "../../components/ThemedView";
+import fetchExtendedWallpapers from "../../scripts/redditfetch";
+import ImagePreviewModal from "../ImagePreviewModal";
+
 // Types
 type Wallpaper = {
   id: string;
@@ -27,13 +59,13 @@ type WallpaperItemProps = {
     height?: number
   ) => void;
   downloadingId: string | null;
-  handleFavorite: (id: string) => void;
-  favorites: string[];
+  handleFavorite: (item: Wallpaper) => void;
+  favorites: Wallpaper[];
   handleShare: (url: string) => void;
+  onPreview: (url: string) => void;
 };
 
-// WallpaperItem component to allow hooks usage per item
-const WallpaperItem = React.memo(function WallpaperItem({
+function WallpaperItem({
   item,
   IMAGE_WIDTH,
   IMAGE_HEIGHT_RATIO,
@@ -43,13 +75,14 @@ const WallpaperItem = React.memo(function WallpaperItem({
   handleFavorite,
   favorites,
   handleShare,
+  onPreview,
 }: WallpaperItemProps) {
-  const [imgLoading, setImgLoading] = React.useState(true);
+  const [imgLoading, setImgLoading] = useState(true);
   return (
     <View
       style={{
         width: IMAGE_WIDTH,
-        marginBottom: IMAGE_MARGIN,
+        marginBottom: 14,
         alignSelf: numColumns === 1 ? "center" : undefined,
       }}
     >
@@ -57,13 +90,10 @@ const WallpaperItem = React.memo(function WallpaperItem({
         activeOpacity={0.8}
         style={{ borderRadius: 12, overflow: "hidden" }}
         accessibilityLabel={`View wallpaper: ${item.title}`}
-        onPress={() => {
-          setPreviewUrl(item.url);
-          setPreviewVisible(true);
-        }}
+        onPress={() => onPreview(item.url)}
       >
         <View style={{ position: "relative" }}>
-          <Image
+          <RNImage
             source={{ uri: item.url }}
             style={{
               width: IMAGE_WIDTH,
@@ -71,13 +101,9 @@ const WallpaperItem = React.memo(function WallpaperItem({
               borderRadius: 12,
               backgroundColor: imgLoading ? "#000" : "#111",
             }}
-            contentFit="cover"
-            transition={300}
             onLoadStart={() => setImgLoading(true)}
             onLoadEnd={() => setImgLoading(false)}
-            // Use low-res preview if available, else fallback to blurred main image
-            placeholder={item.preview ? { uri: item.preview } : undefined}
-            placeholderContentFit="cover"
+            resizeMode="cover"
           />
           {imgLoading && (
             <View
@@ -115,15 +141,21 @@ const WallpaperItem = React.memo(function WallpaperItem({
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => handleFavorite(item.id)}
+          onPress={() => handleFavorite(item)}
           accessibilityLabel={`$${
-            favorites.includes(item.id) ? "Unfavorite" : "Favorite"
+            favorites.some((f) => f.id === item.id) ? "Unfavorite" : "Favorite"
           } wallpaper: ${item.title}`}
         >
           <Ionicons
-            name={favorites.includes(item.id) ? "heart" : "heart-outline"}
+            name={
+              favorites.some((f) => f.id === item.id)
+                ? "heart"
+                : "heart-outline"
+            }
             size={22}
-            color={favorites.includes(item.id) ? "#e74c3c" : "#0a7ea4"}
+            color={
+              favorites.some((f) => f.id === item.id) ? "#e74c3c" : "#0a7ea4"
+            }
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -135,38 +167,7 @@ const WallpaperItem = React.memo(function WallpaperItem({
       </View>
     </View>
   );
-});
-// If you see a module error, run: npm install @react-native-picker/picker
-import { Picker } from "@react-native-picker/picker";
-import { Image } from "expo-image";
-import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
-} from "react-native";
-
-import ParallaxScrollView from "@/components/ParallaxScrollView";
-import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
-// @ts-ignore
-import { useSettings } from "@/components/SettingsContext";
-import { Ionicons } from "@expo/vector-icons";
-import * as FileSystem from "expo-file-system";
-import * as ImageManipulator from "expo-image-manipulator";
-import * as MediaLibrary from "expo-media-library";
-import { useEffect as useLocalEffect, useState as useLocalState } from "react";
-import { Share } from "react-native";
-import {
-  loadFavorites,
-  saveFavorites,
-} from "../../components/favorites-storage";
-import { fetchExtendedWallpapers } from "../../scripts/redditfetch";
-import ImagePreviewModal from "../ImagePreviewModal";
+}
 
 const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
@@ -209,30 +210,23 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [favorites, setFavorites] = useLocalState<string[]>([]);
+  const [favorites, setFavorites] = useLocalState<Wallpaper[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // For UX: only show a limited number of images at a time
   const PAGE_SIZE = 6;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // Load favorites from persistent storage on mount
   useLocalEffect(() => {
     (async () => {
       const favs = await loadFavorites();
-      setFavorites(favs);
+      setFavorites(Array.isArray(favs) ? favs : []);
     })();
   }, []);
   // Save favorites to persistent storage when changed
   useLocalEffect(() => {
     saveFavorites(favorites);
-    // Also persist all currently loaded wallpapers for the Favorites tab
-    if (images.length > 0) {
-      try {
-        localStorage.setItem("user-wallpapers", JSON.stringify(images));
-      } catch {}
-    }
-  }, [favorites, images]);
+  }, [favorites]);
   const [afterMap, setAfterMap] = useState<Record<string, string | null>>({});
   // Responsive columns: 1 column for small screens, 2 for larger
   const numColumns = window.width < 500 ? 1 : 2;
@@ -321,30 +315,7 @@ export default function HomeScreen() {
       let finalUri = fileUri;
       // Download original image
       const { uri } = await FileSystem.downloadAsync(url, fileUri);
-      // Optionally resize/crop to device resolution
-      if (resizeToDevice && width && height) {
-        const manipResult = await ImageManipulator.manipulateAsync(
-          uri,
-          [
-            {
-              resize: {
-                width: Math.round(window.width),
-                height: Math.round(window.height),
-              },
-            },
-            {
-              crop: {
-                originX: 0,
-                originY: 0,
-                width: Math.round(window.width),
-                height: Math.round(window.height),
-              },
-            },
-          ],
-          { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
-        );
-        finalUri = manipResult.uri;
-      }
+      // No resizing or cropping; always save the original image
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") throw new Error("Permission denied");
       const asset = await MediaLibrary.createAssetAsync(finalUri);
@@ -371,180 +342,161 @@ export default function HomeScreen() {
   };
 
   // Toggle favorite
-  const handleFavorite = (id: string) => {
-    setFavorites((prev) =>
-      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
-    );
+  const handleFavorite = (item: Wallpaper) => {
+    setFavorites((prev) => {
+      const exists = prev.some((f) => f.id === item.id);
+      if (exists) {
+        return prev.filter((f) => f.id !== item.id);
+      } else {
+        return [item, ...prev];
+      }
+    });
   };
 
   // Filter images by device resolution if enabled
   const filteredImages = filterByResolution
-    ? images.filter(
-        (img) =>
-          img.width >= Math.round(window.width) &&
-          img.height >= Math.round(window.height)
-      )
+    ? images.filter((img) => {
+        // Use device window dimensions, but account for orientation
+        const deviceWidth = Math.max(window.width, window.height);
+        const deviceHeight = Math.min(window.width, window.height);
+        // Accept if image is at most as large as device in both dimensions, regardless of orientation
+        return (
+          (img.width <= deviceWidth && img.height <= deviceHeight) ||
+          (img.width <= deviceHeight && img.height <= deviceWidth)
+        );
+      })
     : images;
   // Only show up to visibleCount images
   const pagedImages = filteredImages.slice(0, visibleCount);
 
   return (
     <>
-      <ParallaxScrollView
-        headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
-        headerImage={
-          <Image
-            source={require("@/assets/images/partial-react-logo.png")}
-            style={styles.reactLogo}
+      <FlatList
+        data={pagedImages}
+        keyExtractor={(item) => item.id}
+        numColumns={numColumns}
+        columnWrapperStyle={numColumns > 1 ? { gap: IMAGE_MARGIN } : undefined}
+        contentContainerStyle={{
+          gap: IMAGE_MARGIN,
+          padding: IMAGE_MARGIN,
+          paddingTop: 0,
+          paddingBottom: 32,
+        }}
+        renderItem={({ item }) => (
+          <WallpaperItem
+            item={item}
+            IMAGE_WIDTH={IMAGE_WIDTH}
+            IMAGE_HEIGHT_RATIO={IMAGE_HEIGHT_RATIO}
+            numColumns={numColumns}
+            handleDownload={handleDownload}
+            downloadingId={downloadingId}
+            handleFavorite={handleFavorite}
+            favorites={favorites}
+            handleShare={handleShare}
+            onPreview={setPreviewUrl}
           />
-        }
-      >
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="title">Reddit Wallpapers</ThemedText>
-        </ThemedView>
-        {/* Duration filter as dropdown */}
-        <View
-          style={[
-            styles.pickerRow,
-            {
-              paddingTop: 16,
-              paddingBottom: 16,
-              backgroundColor: "#23272e",
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: "#444",
-              marginHorizontal: 12,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 8,
-              elevation: 8,
-            },
-          ]}
-        >
-          <Picker
-            selectedValue={duration}
-            onValueChange={(val) => setDuration(val)}
-            style={[
-              styles.picker,
-              {
-                color: "#fff",
-                backgroundColor: "transparent",
-                fontWeight: "bold",
-                fontSize: 18,
-                borderRadius: 12,
-              },
-            ]}
-            itemStyle={[
-              styles.pickerItem,
-              { color: "#000", fontWeight: "bold", fontSize: 18 },
-            ]}
-            dropdownIconColor="#0a7ea4"
-            enabled={true}
-            mode="dropdown"
-          >
-            {DURATION_OPTIONS.map((opt) => (
-              <Picker.Item
-                key={opt.value}
-                label={opt.label}
-                value={opt.value}
-                color="#000"
-              />
-            ))}
-          </Picker>
-        </View>
-
-        {loading && (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" />
-          </View>
         )}
-
-        {error && (
-          <View style={styles.centered}>
-            <ThemedText>{error}</ThemedText>
-          </View>
-        )}
-
-        {!loading && !error && (
+        removeClippedSubviews={true}
+        initialNumToRender={6}
+        windowSize={7}
+        ListHeaderComponent={
           <>
-            {images.length === 0 ? (
+            <View
+              style={{
+                backgroundColor: "#A1CEDC",
+                height: 178,
+                width: "100%",
+                position: "relative",
+                marginBottom: 8,
+              }}
+            >
+              <ExpoImage
+                source={require("../../assets/images/partial-react-logo.png")}
+                style={styles.reactLogo}
+                contentFit="contain"
+              />
+            </View>
+            <ThemedView style={styles.titleContainer}>
+              <ThemedText type="title">Reddit Wallpapers</ThemedText>
+            </ThemedView>
+            <View
+              style={[
+                styles.pickerRow,
+                {
+                  paddingTop: 16,
+                  paddingBottom: 16,
+                  zIndex: 200,
+                  elevation: 20,
+                },
+              ]}
+            >
+              <Picker
+                selectedValue={duration}
+                onValueChange={(val) => setDuration(val)}
+                style={[styles.picker, { zIndex: 201, elevation: 21 }]}
+                itemStyle={styles.pickerItem}
+                dropdownIconColor="#0a7ea4"
+                enabled={true}
+              >
+                {DURATION_OPTIONS.map((opt) => (
+                  <Picker.Item
+                    key={opt.value}
+                    label={opt.label}
+                    value={opt.value}
+                  />
+                ))}
+              </Picker>
+            </View>
+            {loading && (
+              <View style={styles.centered}>
+                <ActivityIndicator size="large" />
+              </View>
+            )}
+            {error && (
+              <View style={styles.centered}>
+                <ThemedText>{error}</ThemedText>
+              </View>
+            )}
+            {!loading && !error && images.length === 0 && (
               <View style={styles.centered}>
                 <ThemedText>No wallpapers found.</ThemedText>
               </View>
-            ) : (
-              <FlatList
-                data={pagedImages}
-                keyExtractor={(item) => item.id}
-                numColumns={numColumns}
-                columnWrapperStyle={
-                  numColumns > 1 ? { gap: IMAGE_MARGIN } : undefined
-                }
-                contentContainerStyle={{
-                  gap: IMAGE_MARGIN,
-                  padding: IMAGE_MARGIN,
-                }}
-                renderItem={({ item }) => (
-                  <WallpaperItem
-                    item={item}
-                    IMAGE_WIDTH={IMAGE_WIDTH}
-                    IMAGE_HEIGHT_RATIO={IMAGE_HEIGHT_RATIO}
-                    numColumns={numColumns}
-                    handleDownload={handleDownload}
-                    downloadingId={downloadingId}
-                    handleFavorite={handleFavorite}
-                    favorites={favorites}
-                    handleShare={handleShare}
-                  />
-                )}
-                removeClippedSubviews={true}
-                initialNumToRender={6}
-                windowSize={11}
-                maxToRenderPerBatch={8}
-                updateCellsBatchingPeriod={16}
-                ListFooterComponent={
-                  loadingMore ? (
-                    <ActivityIndicator style={{ margin: 16 }} />
-                  ) : null
-                }
-                getItemLayout={(_, index) => ({
-                  length: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 70,
-                  offset: (IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 70) * index,
-                  index,
-                })}
-              />
             )}
-            <View style={{ alignItems: "center", marginVertical: 16 }}>
-              {/* Show Load More button for paged images */}
-              {visibleCount < filteredImages.length && (
-                <TouchableOpacity
-                  onPress={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                  style={{
-                    backgroundColor: "#0a7ea4",
-                    borderRadius: 8,
-                    paddingHorizontal: 24,
-                    paddingVertical: 12,
-                    marginTop: 8,
-                    opacity: loadingMore ? 0.6 : 1,
-                  }}
-                  disabled={loadingMore}
-                  accessibilityLabel="Load more wallpapers"
-                >
-                  <ThemedText
-                    style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
-                  >
-                    {loadingMore ? "Loading..." : "Load More Wallpapers"}
-                  </ThemedText>
-                </TouchableOpacity>
-              )}
-            </View>
           </>
-        )}
-      </ParallaxScrollView>
+        }
+        ListFooterComponent={
+          <View style={{ alignItems: "center", marginVertical: 16 }}>
+            {loadingMore && <ActivityIndicator style={{ margin: 16 }} />}
+            {/* Show Load More button for paged images */}
+            {visibleCount < filteredImages.length && !loadingMore && (
+              <TouchableOpacity
+                onPress={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                style={{
+                  backgroundColor: "#0a7ea4",
+                  borderRadius: 8,
+                  paddingHorizontal: 24,
+                  paddingVertical: 12,
+                  marginTop: 8,
+                  opacity: loadingMore ? 0.6 : 1,
+                }}
+                disabled={loadingMore}
+                accessibilityLabel="Load more wallpapers"
+              >
+                <ThemedText
+                  style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
+                >
+                  {loadingMore ? "Loading..." : "Load More Wallpapers"}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
+        }
+        ListEmptyComponent={null}
+      />
       <ImagePreviewModal
-        visible={previewVisible}
-        imageUrl={previewUrl}
-        onClose={() => setPreviewVisible(false)}
+        url={previewUrl}
+        visible={!!previewUrl}
+        onClose={() => setPreviewUrl(null)}
       />
     </>
   );
@@ -556,7 +508,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 16,
-    // boxShadow: "0 2px 8px rgba(0,0,0,0.08)", // Use boxShadow for web
+    // If you want a shadow, use boxShadow for web compatibility
+    // boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
   },
   reactLogo: {
     height: 178,
@@ -564,7 +517,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: "absolute",
-    // boxShadow: "0 4px 24px rgba(0,0,0,0.12)", // Use boxShadow for web
+    // boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
   },
   centered: {
     alignItems: "center",
@@ -583,7 +536,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 2,
     gap: 12,
-    // boxShadow: "0 1px 4px rgba(0,0,0,0.10)", // Use boxShadow for web
+    // boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
   },
   pickerRow: {
     marginBottom: 8,

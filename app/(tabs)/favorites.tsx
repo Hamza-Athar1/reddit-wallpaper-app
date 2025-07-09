@@ -1,23 +1,20 @@
-import { ThemedText } from "@/components/ThemedText";
-import { loadFavorites, saveFavorites } from "@/components/favorites-storage";
-import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
-import { Image as ExpoImage } from "expo-image";
-import * as MediaLibrary from "expo-media-library";
-import React from "react";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
-  Share,
+  Image as RNImage,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
+import { loadFavorites } from "../../components/favorites-storage";
+import { ThemedText } from "../../components/ThemedText";
+import { ThemedView } from "../../components/ThemedView";
+import ImagePreviewModal from "../ImagePreviewModal";
 
-// Wallpaper type (should match your app)
-type Wallpaper = {
+// Types must match main screen
+export type Wallpaper = {
   id: string;
   title: string;
   url: string;
@@ -33,40 +30,22 @@ type Wallpaper = {
   permalink?: string;
 };
 
-const IMAGE_MARGIN = 14;
-const IMAGE_HEIGHT_RATIO = 0.55;
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const NUM_COLUMNS = 2;
-const IMAGE_WIDTH =
-  (SCREEN_WIDTH - IMAGE_MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
-
 import { useFocusEffect } from "@react-navigation/native";
-import { useWindowDimensions } from "react-native";
-export default function FavoritesScreen() {
-  const window = useWindowDimensions();
-  const [favorites, setFavorites] = React.useState<string[]>([]);
-  const [allWallpapers, setAllWallpapers] = React.useState<Wallpaper[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const IMAGE_WIDTH =
-    (window.width - IMAGE_MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
 
-  // Reload favorites and wallpapers every time the tab is focused
+export default function FavoritesScreen() {
+  const [favorites, setFavorites] = useState<Wallpaper[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Reload favorites every time the tab is focused
   useFocusEffect(
     React.useCallback(() => {
       let isActive = true;
       (async () => {
         setLoading(true);
         const favs = await loadFavorites();
-        let wallpapers: Wallpaper[] = [];
-        try {
-          const raw = await AsyncStorage.getItem("user-wallpapers");
-          if (raw) wallpapers = JSON.parse(raw);
-        } catch {}
-        if (isActive) {
-          setFavorites(favs);
-          setAllWallpapers(wallpapers);
-          setLoading(false);
-        }
+        if (isActive) setFavorites(Array.isArray(favs) ? favs : []);
+        setLoading(false);
       })();
       return () => {
         isActive = false;
@@ -74,144 +53,128 @@ export default function FavoritesScreen() {
     }, [])
   );
 
-  const favoriteWallpapers = allWallpapers.filter((w) =>
-    favorites.includes(w.id)
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size={32} color="#0a7ea4" />
-      </View>
-    );
-  }
-
-  if (favoriteWallpapers.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ThemedText>No favorites yet.</ThemedText>
-      </View>
-    );
-  }
-  // Download image to device, optionally resize/crop to device resolution
-  const handleDownload = async (
-    url: string,
-    id: string,
-    width?: number,
-    height?: number
-  ) => {
-    try {
-      const filename = url.split("/").pop()?.split("?")[0] || `${id}.jpg`;
-      let fileUri = FileSystem.cacheDirectory + filename;
-      let finalUri = fileUri;
-      // Download original image
-      const { uri } = await FileSystem.downloadAsync(url, fileUri);
-      // Optionally resize/crop to device resolution (not available here, but could be added)
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== "granted") throw new Error("Permission denied");
-      const asset = await MediaLibrary.createAssetAsync(finalUri);
-      try {
-        await MediaLibrary.createAlbumAsync("Reddit Wallpapers", asset, false);
-      } catch (err) {
-        // Ignore error if album already exists
-      }
-      alert("Image saved to your Photos!");
-    } catch (e) {
-      alert("Failed to save image: " + e);
-    }
-  };
-
-  // Share image
-  const handleShare = async (url: string) => {
-    try {
-      await Share.share({ url });
-    } catch (e) {
-      alert("Failed to share: " + e);
-    }
-  };
-
-  // Toggle favorite
-  const handleFavorite = (id: string) => {
-    setFavorites((prev) => {
-      const updated = prev.includes(id)
-        ? prev.filter((f) => f !== id)
-        : [...prev, id];
-      saveFavorites(updated);
-      return updated;
-    });
-  };
-
   return (
-    <FlatList
-      data={favoriteWallpapers}
-      keyExtractor={(item) => item.id}
-      numColumns={NUM_COLUMNS}
-      contentContainerStyle={{ padding: IMAGE_MARGIN }}
-      renderItem={({ item }) => (
-        <View style={{ width: IMAGE_WIDTH, margin: IMAGE_MARGIN / 2 }}>
-          <ExpoImage
-            source={{ uri: item.url }}
-            style={{
-              width: IMAGE_WIDTH,
-              height: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO,
-              borderRadius: 12,
-              backgroundColor: "#000",
-            }}
-            contentFit="cover"
-            placeholder={item.preview ? { uri: item.preview } : undefined}
-            placeholderContentFit="cover"
-          />
-          <ThemedText numberOfLines={2} style={{ marginTop: 6, color: "#fff" }}>
-            {item.title}
-          </ThemedText>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-around",
-              alignItems: "center",
-              marginTop: 6,
-              marginBottom: 2,
-              gap: 12,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() =>
-                handleDownload(item.url, item.id, item.width, item.height)
-              }
-              accessibilityLabel={`Download wallpaper: ${item.title}`}
-            >
-              <Ionicons name="download-outline" size={22} color="#0a7ea4" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => handleFavorite(item.id)}
-              accessibilityLabel={`$${
-                favorites.includes(item.id) ? "Unfavorite" : "Favorite"
-              } wallpaper: ${item.title}`}
-            >
-              <Ionicons
-                name={favorites.includes(item.id) ? "heart" : "heart-outline"}
-                size={22}
-                color={favorites.includes(item.id) ? "#e74c3c" : "#0a7ea4"}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => handleShare(item.url)}
-              accessibilityLabel={`Share a: ${item.title}`}
-            >
-              <Ionicons name="share-social-outline" size={22} color="#0a7ea4" />
-            </TouchableOpacity>
-          </View>
+    <ThemedView style={{ flex: 1, paddingTop: 32 }}>
+      <ThemedText type="title" style={{ margin: 16 }}>
+        Favorites
+      </ThemedText>
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" />
         </View>
+      ) : favorites.length === 0 ? (
+        <View style={styles.centered}>
+          <ThemedText>No favorites yet.</ThemedText>
+        </View>
+      ) : (
+        <FlatList
+          data={favorites}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          contentContainerStyle={{ gap: 14, padding: 14 }}
+          columnWrapperStyle={{ gap: 14 }}
+          renderItem={({ item }) => (
+            <View style={{ width: 160, marginBottom: 14 }}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={{ borderRadius: 12, overflow: "hidden" }}
+                accessibilityLabel={`View wallpaper: ${item.title}`}
+                onPress={() => setPreviewUrl(item.url)}
+              >
+                <View style={{ position: "relative" }}>
+                  <RNImage
+                    source={{ uri: item.url }}
+                    style={{
+                      width: 160,
+                      height: 90,
+                      borderRadius: 12,
+                      backgroundColor: "#111",
+                    }}
+                    resizeMode="cover"
+                  />
+                </View>
+              </TouchableOpacity>
+              <ThemedText
+                numberOfLines={2}
+                style={{ fontSize: 12, marginTop: 4, marginHorizontal: 2 }}
+              >
+                {item.title}
+              </ThemedText>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-around",
+                  alignItems: "center",
+                  marginTop: 6,
+                  marginBottom: 2,
+                  gap: 12,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => {
+                    // Download logic: open image in new tab for web, or use download logic for native
+                    if (
+                      typeof window !== "undefined" &&
+                      window.navigator &&
+                      window.navigator.userAgent
+                    ) {
+                      window.open(item.url, "_blank");
+                    } else {
+                      // Optionally implement native download logic here
+                    }
+                  }}
+                  accessibilityLabel={`Download wallpaper: ${item.title}`}
+                >
+                  <Ionicons name="download-outline" size={22} color="#0a7ea4" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setFavorites((prev) =>
+                      prev.filter((f) => f.id !== item.id)
+                    );
+                  }}
+                  accessibilityLabel={`Unfavorite wallpaper: ${item.title}`}
+                >
+                  <Ionicons name="heart" size={22} color="#e74c3c" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (
+                      typeof window !== "undefined" &&
+                      window.navigator &&
+                      window.navigator.share
+                    ) {
+                      window.navigator.share({ url: item.url });
+                    } else {
+                      // Optionally implement native share logic here
+                    }
+                  }}
+                  accessibilityLabel={`Share a: ${item.title}`}
+                >
+                  <Ionicons
+                    name="share-social-outline"
+                    size={22}
+                    color="#0a7ea4"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
       )}
-    />
+      <ImagePreviewModal
+        url={previewUrl}
+        visible={!!previewUrl}
+        onClose={() => setPreviewUrl(null)}
+      />
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   centered: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#181a20",
+    marginVertical: 32,
   },
 });
