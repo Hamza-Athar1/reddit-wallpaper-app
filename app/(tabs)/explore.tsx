@@ -27,12 +27,6 @@ const DURATION_OPTIONS = [
 
 export default function SettingsScreen() {
   const { subreddits, setSubreddits } = useSettings();
-  // New settings state
-  const [sortOrder, setSortOrder] = React.useState("top");
-  const [sfwOnly, setSfwOnly] = React.useState(true);
-  const [autoRefresh, setAutoRefresh] = React.useState(true);
-  const [showDetails, setShowDetails] = React.useState(true);
-  const [gridView, setGridView] = React.useState(true);
 
   // Persist subreddits to AsyncStorage
   React.useEffect(() => {
@@ -148,124 +142,6 @@ export default function SettingsScreen() {
     >
       <ThemedView style={styles.titleContainer}>
         <ThemedText type="title">Settings</ThemedText>
-      </ThemedView>
-
-      {/* Sort Order */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionHeader}>
-          Default Sort Order
-        </ThemedText>
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={[
-              styles.durationPill,
-              sortOrder === "top" && styles.durationPillActive,
-            ]}
-            onPress={() => setSortOrder("top")}
-          >
-            <ThemedText
-              style={{ color: sortOrder === "top" ? "#fff" : "#0a7ea4" }}
-            >
-              Top
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.durationPill,
-              sortOrder === "new" && styles.durationPillActive,
-            ]}
-            onPress={() => setSortOrder("new")}
-          >
-            <ThemedText
-              style={{ color: sortOrder === "new" ? "#fff" : "#0a7ea4" }}
-            >
-              New
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.durationPill,
-              sortOrder === "hot" && styles.durationPillActive,
-            ]}
-            onPress={() => setSortOrder("hot")}
-          >
-            <ThemedText
-              style={{ color: sortOrder === "hot" ? "#fff" : "#0a7ea4" }}
-            >
-              Hot
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.durationPill,
-              sortOrder === "rising" && styles.durationPillActive,
-            ]}
-            onPress={() => setSortOrder("rising")}
-          >
-            <ThemedText
-              style={{ color: sortOrder === "rising" ? "#fff" : "#0a7ea4" }}
-            >
-              Rising
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-      </ThemedView>
-
-      {/* SFW Filter, Auto-Refresh, Show Details, Grid/List View */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionHeader}>
-          Preferences
-        </ThemedText>
-        <View style={styles.row}>
-          <ThemedText>Safe for Work Only</ThemedText>
-          <TouchableOpacity
-            style={[styles.durationPill, sfwOnly && styles.durationPillActive]}
-            onPress={() => setSfwOnly((v) => !v)}
-          >
-            <ThemedText style={{ color: sfwOnly ? "#fff" : "#0a7ea4" }}>
-              {sfwOnly ? "On" : "Off"}
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.row}>
-          <ThemedText>Auto-Refresh on App Open</ThemedText>
-          <TouchableOpacity
-            style={[
-              styles.durationPill,
-              autoRefresh && styles.durationPillActive,
-            ]}
-            onPress={() => setAutoRefresh((v) => !v)}
-          >
-            <ThemedText style={{ color: autoRefresh ? "#fff" : "#0a7ea4" }}>
-              {autoRefresh ? "On" : "Off"}
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.row}>
-          <ThemedText>Show Wallpaper Details</ThemedText>
-          <TouchableOpacity
-            style={[
-              styles.durationPill,
-              showDetails && styles.durationPillActive,
-            ]}
-            onPress={() => setShowDetails((v) => !v)}
-          >
-            <ThemedText style={{ color: showDetails ? "#fff" : "#0a7ea4" }}>
-              {showDetails ? "On" : "Off"}
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.row}>
-          <ThemedText>Grid View</ThemedText>
-          <TouchableOpacity
-            style={[styles.durationPill, gridView && styles.durationPillActive]}
-            onPress={() => setGridView((v) => !v)}
-          >
-            <ThemedText style={{ color: gridView ? "#fff" : "#0a7ea4" }}>
-              {gridView ? "On" : "Off"}
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
       </ThemedView>
 
       <ThemedView style={styles.section}>

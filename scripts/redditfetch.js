@@ -46,7 +46,6 @@ async function fetchExtendedWallpapers({
               /\.(jpe?g|png)$/i.test(p.url) &&
               !p.url.includes("gif") &&
               !p.url.includes("gifv") &&
-              !p.over_18 &&
               p.preview.images[0].source.width > 150 &&
               p.preview.images[0].source.height > 150
           )
@@ -88,6 +87,7 @@ async function fetchExtendedWallpapers({
 
   return { images: dedupedImages, after: afterTokens };
 }
+export { fetchExtendedWallpapers };
 export default fetchExtendedWallpapers;
 import { loadSettings } from "../components/settings-storage";
 
