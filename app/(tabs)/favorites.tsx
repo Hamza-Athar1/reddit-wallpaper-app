@@ -135,7 +135,7 @@ export default function FavoritesScreen() {
                   }}
                   accessibilityLabel={`Unfavorite wallpaper: ${item.title}`}
                 >
-                  <Ionicons name="heart" size={22} color="#e74c3c" />
+                  <Ionicons name={"heart"} size={22} color="#e74c3c" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {

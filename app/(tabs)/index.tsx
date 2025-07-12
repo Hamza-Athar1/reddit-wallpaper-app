@@ -1,5 +1,4 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Picker } from "@react-native-picker/picker";
 import * as FileSystem from "expo-file-system";
 import { Image as ExpoImage } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
@@ -173,48 +172,17 @@ const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
-const DURATION_OPTIONS = [
-  { label: "Hour", value: "hour" },
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-  { label: "Year", value: "year" },
-  { label: "All", value: "all" },
-];
-
 export default function HomeScreen() {
   const window = useWindowDimensions();
-  const {
-    subreddits,
-    duration,
-    setDuration,
-    filterByResolution,
-    resizeToDevice,
-  } = useSettings();
-  type Wallpaper = {
-    id: string;
-    title: string;
-    url: string;
-    width: number;
-    height: number;
-    preview: string | null;
-    subreddit?: string;
-    time?: string;
-    postType?: string;
-    created_utc?: number;
-    score?: number;
-    author?: string;
-    permalink?: string;
-  };
+  const { subreddits, filterByResolution } = useSettings();
+  // Always use 'all' as the duration
+  const duration = "all";
   const [images, setImages] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useLocalState<Wallpaper[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  // For UX: only show a limited number of images at a time
-  const PAGE_SIZE = 6;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // Load favorites from persistent storage on mount
   useLocalEffect(() => {
@@ -233,7 +201,10 @@ export default function HomeScreen() {
   const IMAGE_WIDTH = Math.floor(
     (window.width - IMAGE_MARGIN * (numColumns + 1)) / numColumns
   );
-  // Fetch images from all subreddits and all time ranges (multi-subreddit, multi-time, with afterMap)
+  /**
+   * Fetch the first page for all subreddit/time combos (reset = true), or next page for each (reset = false).
+   * On reset, replaces images and afterMap. Otherwise, appends new images and updates afterMap.
+   */
   const fetchAll = async (reset = false) => {
     setLoading(true);
     setError(null);
@@ -245,15 +216,26 @@ export default function HomeScreen() {
           ? loaded.subreddits
           : subreddits;
       const timeRanges = [duration];
-      const { images: fetchedImages, after: newAfterMap } =
-        await fetchExtendedWallpapers({
-          subreddits: srList,
-          timeRanges,
-          postType: "top",
-          limit: 50,
-          after: reset ? {} : afterMap,
+      const { images: fetchedImages, after: newAfterMap } = await (
+        fetchExtendedWallpapers as any
+      )({
+        subreddits: srList,
+        timeRanges,
+        postType: "top",
+        limit: 30,
+        after: reset ? {} : afterMap,
+      });
+      if (reset) {
+        setImages(Array.isArray(fetchedImages) ? fetchedImages : []);
+      } else {
+        setImages((prev: Wallpaper[]) => {
+          const ids = new Set(prev.map((i: Wallpaper) => i.id));
+          return [
+            ...prev,
+            ...fetchedImages.filter((i: Wallpaper) => !ids.has(i.id)),
+          ];
         });
-      setImages(Array.isArray(fetchedImages) ? fetchedImages : []);
+      }
       setAfterMap(newAfterMap);
     } catch (e) {
       setError("Failed to load images.");
@@ -263,11 +245,13 @@ export default function HomeScreen() {
   };
   // Initial fetch and on duration/subreddits change
   useEffect(() => {
-    fetchAll(true);
-    setVisibleCount(PAGE_SIZE);
+    fetchAll(true); // Reset images and afterMap
     // eslint-disable-next-line
   }, [duration, subreddits.join(",")]);
-  // Load more images (pagination, multi-subreddit, multi-time)
+  /**
+   * Fetch the next page for each subreddit/time combo using afterMap.
+   * Appends new images, updates afterMap, disables button if all afterMap values are null.
+   */
   const loadMore = async () => {
     if (loadingMore) return;
     if (Object.values(afterMap).every((v) => v == null)) return;
@@ -280,20 +264,20 @@ export default function HomeScreen() {
           ? loaded.subreddits
           : subreddits;
       const timeRanges = [duration];
-      const { images: newImages, after: newAfterMap } =
-        await fetchExtendedWallpapers({
-          subreddits: srList,
-          timeRanges,
-          postType: "top",
-          limit: 50,
-          after: afterMap,
-        });
+      const { images: newImages, after: newAfterMap } = await (
+        fetchExtendedWallpapers as any
+      )({
+        subreddits: srList,
+        timeRanges,
+        postType: "top",
+        limit: 30,
+        after: afterMap,
+      });
       setImages((prev: Wallpaper[]) => {
-        const ids = new Set(prev.map((i) => i.id));
+        const ids = new Set(prev.map((i: Wallpaper) => i.id));
         return [...prev, ...newImages.filter((i: Wallpaper) => !ids.has(i.id))];
       });
       setAfterMap(newAfterMap);
-      setVisibleCount((prev) => Math.max(prev, PAGE_SIZE));
     } catch (e) {
       // Optionally show error
     } finally {
@@ -366,13 +350,10 @@ export default function HomeScreen() {
         );
       })
     : images;
-  // Only show up to visibleCount images
-  const pagedImages = filteredImages.slice(0, visibleCount);
-
   return (
     <>
       <FlatList
-        data={pagedImages}
+        data={filteredImages}
         keyExtractor={(item) => item.id}
         numColumns={numColumns}
         columnWrapperStyle={numColumns > 1 ? { gap: IMAGE_MARGIN } : undefined}
@@ -419,34 +400,6 @@ export default function HomeScreen() {
             <ThemedView style={styles.titleContainer}>
               <ThemedText type="title">Reddit Wallpapers</ThemedText>
             </ThemedView>
-            <View
-              style={[
-                styles.pickerRow,
-                {
-                  paddingTop: 16,
-                  paddingBottom: 16,
-                  zIndex: 200,
-                  elevation: 20,
-                },
-              ]}
-            >
-              <Picker
-                selectedValue={duration}
-                onValueChange={(val) => setDuration(val)}
-                style={[styles.picker, { zIndex: 201, elevation: 21 }]}
-                itemStyle={styles.pickerItem}
-                dropdownIconColor="#0a7ea4"
-                enabled={true}
-              >
-                {DURATION_OPTIONS.map((opt) => (
-                  <Picker.Item
-                    key={opt.value}
-                    label={opt.label}
-                    value={opt.value}
-                  />
-                ))}
-              </Picker>
-            </View>
             {loading && (
               <View style={styles.centered}>
                 <ActivityIndicator size="large" />
@@ -467,10 +420,9 @@ export default function HomeScreen() {
         ListFooterComponent={
           <View style={{ alignItems: "center", marginVertical: 16 }}>
             {loadingMore && <ActivityIndicator style={{ margin: 16 }} />}
-            {/* Show Load More button for paged images */}
-            {visibleCount < filteredImages.length && !loadingMore && (
+            {Object.values(afterMap).some((v) => v != null) && !loadingMore && (
               <TouchableOpacity
-                onPress={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                onPress={loadMore}
                 style={{
                   backgroundColor: "#0a7ea4",
                   borderRadius: 8,
@@ -492,6 +444,8 @@ export default function HomeScreen() {
           </View>
         }
         ListEmptyComponent={null}
+        refreshing={loading}
+        onRefresh={() => fetchAll(true)}
       />
       <ImagePreviewModal
         url={previewUrl}
@@ -554,42 +508,3 @@ const styles = StyleSheet.create({
     color: "#0a7ea4",
   },
 });
-
-// Sort images by duration (ordering only, not fetch)
-function sortImagesByDuration(images: any[], duration: string) {
-  // Helper to get age bucket
-  const now = Date.now() / 1000;
-  function getBucket(img: any) {
-    const age = now - (img.created_utc || 0);
-    if (duration === "hour") return age <= 60 * 60 ? 0 : 1;
-    if (duration === "day")
-      return age <= 60 * 60 * 24 ? 0 : age <= 60 * 60 * 24 * 7 ? 1 : 2;
-    if (duration === "week")
-      return age <= 60 * 60 * 24 * 7
-        ? 0
-        : age <= 60 * 60 * 24 * 30
-        ? 1
-        : age <= 60 * 60 * 24 * 365
-        ? 2
-        : 3;
-    if (duration === "month")
-      return age <= 60 * 60 * 24 * 30 ? 0 : age <= 60 * 60 * 24 * 365 ? 1 : 2;
-    if (duration === "year") return age <= 60 * 60 * 24 * 365 ? 0 : 1;
-    return 0;
-  }
-  // Group by bucket, then sort each bucket by score (top)
-  const buckets: Record<number, any[]> = {};
-  for (const img of images) {
-    const b = getBucket(img);
-    if (!buckets[b]) buckets[b] = [];
-    buckets[b].push(img);
-  }
-  const sorted: any[] = [];
-  const bucketOrder = Object.keys(buckets)
-    .map(Number)
-    .sort((a, b) => a - b);
-  for (const b of bucketOrder) {
-    sorted.push(...buckets[b].sort((a, b) => (b.score || 0) - (a.score || 0)));
-  }
-  return sorted;
-}

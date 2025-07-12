@@ -8,6 +8,25 @@
  * @param {Object} [params.after] - Optional. Object mapping `${subreddit}_${time}` to "after" tokens.
  * @returns {Promise<{images: any[], after: Record<string, string|null>}>}
  */
+/**
+ * Fetch a single page of wallpapers from multiple subreddits and time ranges, supporting infinite pagination.
+ *
+ * For each subreddit and time range, fetches the next page using the provided afterMap (Reddit's cursor).
+ * Returns images and updated afterMap for each subreddit/time combo.
+ *
+ * Usage pattern (frontend):
+ *   - On mount: call with after = {} to get first page for each subreddit/time
+ *   - On load more: call with after = afterMap from previous call to get next page for each
+ *   - Accumulate images in state, update afterMap, and stop when all afterMap values are null
+ *
+ * @param {Object} params
+ * @param {string[]} params.subreddits - Array of subreddit names
+ * @param {string[]} params.timeRanges - Array of time ranges (e.g. ["day", "week"])
+ * @param {string} params.postType - "top", "hot", or "new"
+ * @param {number} params.limit - Number of posts per request
+ * @param {Object} [params.after] - Object mapping `${subreddit}_${time}` to Reddit's "after" cursor
+ * @returns {Promise<{images: any[], after: Record<string, string|null>}>}
+ */
 async function fetchExtendedWallpapers({
   subreddits = [],
   timeRanges = ["week"],
@@ -31,6 +50,7 @@ async function fetchExtendedWallpapers({
 
       try {
         const res = await fetch(url);
+        if (!res.ok) throw new Error(`Reddit API error: ${res.status}`);
         const json = await res.json();
         if (!json.data || !Array.isArray(json.data.children)) {
           afterTokens[key] = null;
@@ -67,15 +87,20 @@ async function fetchExtendedWallpapers({
             permalink: p.permalink,
           }));
         allImages.push(...images);
+        // If Reddit returns null for after, we've reached the end for this subreddit/time
         afterTokens[key] = json.data.after || null;
       } catch (e) {
+        // On error, set after to null so we don't keep retrying
         afterTokens[key] = null;
-        // Optionally log error
+        // Optionally log error for debugging
+        if (process.env.NODE_ENV !== 'production') {
+          console.error(`Error fetching r/${subreddit} (${time}):`, e);
+        }
       }
     }
   }
 
-  // Deduplicate by post ID
+  // Deduplicate by post ID (across all subreddits/times)
   const seen = new Set();
   const dedupedImages = [];
   for (const img of allImages) {
