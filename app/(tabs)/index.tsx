@@ -2,12 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import * as FileSystem from "expo-file-system";
 import { Image as ExpoImage } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
-import React, {
-  useEffect,
-  useEffect as useLocalEffect,
-  useState as useLocalState,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -64,7 +59,7 @@ type WallpaperItemProps = {
   onPreview: (url: string) => void;
 };
 
-function WallpaperItem({
+const WallpaperItem = React.memo(function WallpaperItem({
   item,
   IMAGE_WIDTH,
   IMAGE_HEIGHT_RATIO,
@@ -77,6 +72,28 @@ function WallpaperItem({
   onPreview,
 }: WallpaperItemProps) {
   const [imgLoading, setImgLoading] = useState(true);
+
+  const isFavorited = useMemo(
+    () => favorites.some((f) => f.id === item.id),
+    [favorites, item.id]
+  );
+
+  const handleImagePress = useCallback(() => {
+    onPreview(item.url);
+  }, [onPreview, item.url]);
+
+  const handleDownloadPress = useCallback(() => {
+    handleDownload(item.url, item.id, item.width, item.height);
+  }, [handleDownload, item.url, item.id, item.width, item.height]);
+
+  const handleFavoritePress = useCallback(() => {
+    handleFavorite(item);
+  }, [handleFavorite, item]);
+
+  const handleSharePress = useCallback(() => {
+    handleShare(item.url);
+  }, [handleShare, item.url]);
+
   return (
     <View
       style={{
@@ -89,7 +106,7 @@ function WallpaperItem({
         activeOpacity={0.8}
         style={{ borderRadius: 12, overflow: "hidden" }}
         accessibilityLabel={`View wallpaper: ${item.title}`}
-        onPress={() => onPreview(item.url)}
+        onPress={handleImagePress}
       >
         <View style={{ position: "relative" }}>
           <RNImage
@@ -127,9 +144,7 @@ function WallpaperItem({
       </ThemedText>
       <View style={styles.buttonRow}>
         <TouchableOpacity
-          onPress={() =>
-            handleDownload(item.url, item.id, item.width, item.height)
-          }
+          onPress={handleDownloadPress}
           accessibilityLabel={`Download wallpaper: ${item.title}`}
           disabled={downloadingId === item.id}
         >
@@ -140,25 +155,19 @@ function WallpaperItem({
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => handleFavorite(item)}
-          accessibilityLabel={`$${
-            favorites.some((f) => f.id === item.id) ? "Unfavorite" : "Favorite"
+          onPress={handleFavoritePress}
+          accessibilityLabel={`${
+            isFavorited ? "Unfavorite" : "Favorite"
           } wallpaper: ${item.title}`}
         >
           <Ionicons
-            name={
-              favorites.some((f) => f.id === item.id)
-                ? "heart"
-                : "heart-outline"
-            }
+            name={isFavorited ? "heart" : "heart-outline"}
             size={22}
-            color={
-              favorites.some((f) => f.id === item.id) ? "#e74c3c" : "#0a7ea4"
-            }
+            color={isFavorited ? "#e74c3c" : "#0a7ea4"}
           />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => handleShare(item.url)}
+          onPress={handleSharePress}
           accessibilityLabel={`Share a: ${item.title}`}
         >
           <Ionicons name="share-social-outline" size={22} color="#0a7ea4" />
@@ -166,7 +175,7 @@ function WallpaperItem({
       </View>
     </View>
   );
-}
+});
 
 const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
@@ -181,26 +190,30 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [favorites, setFavorites] = useLocalState<Wallpaper[]>([]);
+  const [favorites, setFavorites] = useState<Wallpaper[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   // Load favorites from persistent storage on mount
-  useLocalEffect(() => {
+  useEffect(() => {
     (async () => {
       const favs = await loadFavorites();
       setFavorites(Array.isArray(favs) ? favs : []);
     })();
   }, []);
+
   // Save favorites to persistent storage when changed
-  useLocalEffect(() => {
+  useEffect(() => {
     saveFavorites(favorites);
   }, [favorites]);
   const [afterMap, setAfterMap] = useState<Record<string, string | null>>({});
-  // Responsive columns: 1 column for small screens, 2 for larger
-  const numColumns = window.width < 500 ? 1 : 2;
-  const IMAGE_WIDTH = Math.floor(
-    (window.width - IMAGE_MARGIN * (numColumns + 1)) / numColumns
-  );
+
+  // Memoize responsive calculations
+  const { numColumns, IMAGE_WIDTH } = useMemo(() => {
+    const cols = window.width < 500 ? 1 : 2;
+    const width = Math.floor((window.width - IMAGE_MARGIN * (cols + 1)) / cols);
+    return { numColumns: cols, IMAGE_WIDTH: width };
+  }, [window.width]);
   /**
    * Fetch the first page for all subreddit/time combos (reset = true), or next page for each (reset = false).
    * On reset, replaces images and afterMap. Otherwise, appends new images and updates afterMap.
@@ -214,7 +227,7 @@ export default function HomeScreen() {
       const srList =
         Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
           ? loaded.subreddits
-          : subreddits;
+          : subreddits || ["wallpapers"];
       const timeRanges = [duration];
       const { images: fetchedImages, after: newAfterMap } = await (
         fetchExtendedWallpapers as any
@@ -245,9 +258,11 @@ export default function HomeScreen() {
   };
   // Initial fetch and on duration/subreddits change
   useEffect(() => {
-    fetchAll(true); // Reset images and afterMap
+    if (subreddits && subreddits.length > 0) {
+      fetchAll(true); // Reset images and afterMap
+    }
     // eslint-disable-next-line
-  }, [duration, subreddits.join(",")]);
+  }, [duration, subreddits?.join(",")]);
   /**
    * Fetch the next page for each subreddit/time combo using afterMap.
    * Appends new images, updates afterMap, disables button if all afterMap values are null.
@@ -262,7 +277,7 @@ export default function HomeScreen() {
       const srList =
         Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
           ? loaded.subreddits
-          : subreddits;
+          : subreddits || ["wallpapers"];
       const timeRanges = [duration];
       const { images: newImages, after: newAfterMap } = await (
         fetchExtendedWallpapers as any
@@ -285,71 +300,109 @@ export default function HomeScreen() {
     }
   };
 
-  // Download image to device, optionally resize/crop to device resolution
-  const handleDownload = async (
-    url: string,
-    id: string,
-    width?: number,
-    height?: number
-  ) => {
-    setDownloadingId(id);
-    try {
-      const filename = url.split("/").pop()?.split("?")[0] || `${id}.jpg`;
-      let fileUri = FileSystem.cacheDirectory + filename;
-      let finalUri = fileUri;
-      // Download original image
-      const { uri } = await FileSystem.downloadAsync(url, fileUri);
-      // No resizing or cropping; always save the original image
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== "granted") throw new Error("Permission denied");
-      const asset = await MediaLibrary.createAssetAsync(finalUri);
+  // Memoized handler functions
+  const handleDownload = useCallback(
+    async (url: string, id: string, width?: number, height?: number) => {
+      setDownloadingId(id);
       try {
-        await MediaLibrary.createAlbumAsync("Reddit Wallpapers", asset, false);
-      } catch (err) {
-        // Ignore error if album already exists
+        const filename = url.split("/").pop()?.split("?")[0] || `${id}.jpg`;
+        let fileUri = FileSystem.cacheDirectory + filename;
+        let finalUri = fileUri;
+        // Download original image
+        const { uri } = await FileSystem.downloadAsync(url, fileUri);
+        // No resizing or cropping; always save the original image
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== "granted") throw new Error("Permission denied");
+        const asset = await MediaLibrary.createAssetAsync(finalUri);
+        try {
+          await MediaLibrary.createAlbumAsync(
+            "Reddit Wallpapers",
+            asset,
+            false
+          );
+        } catch (err) {
+          // Ignore error if album already exists
+        }
+        alert("Image saved to your Photos!");
+      } catch (e) {
+        alert("Failed to save image: " + e);
+      } finally {
+        setDownloadingId(null);
       }
-      alert("Image saved to your Photos!");
-    } catch (e) {
-      alert("Failed to save image: " + e);
-    } finally {
-      setDownloadingId(null);
-    }
-  };
+    },
+    []
+  );
 
-  // Share image
-  const handleShare = async (url: string) => {
+  const handleShare = useCallback(async (url: string) => {
     try {
       await Share.share({ url });
     } catch (e) {
       alert("Failed to share: " + e);
     }
-  };
+  }, []);
 
-  // Toggle favorite
-  const handleFavorite = (item: Wallpaper) => {
-    setFavorites((prev) => {
-      const exists = prev.some((f) => f.id === item.id);
+  const handleFavorite = useCallback((item: Wallpaper) => {
+    setFavorites((prev: Wallpaper[]) => {
+      const exists = prev.some((f: Wallpaper) => f.id === item.id);
       if (exists) {
-        return prev.filter((f) => f.id !== item.id);
+        return prev.filter((f: Wallpaper) => f.id !== item.id);
       } else {
         return [item, ...prev];
       }
     });
-  };
+  }, []);
 
-  // Filter images by device resolution if enabled
-  const filteredImages = filterByResolution
-    ? images.filter((img) => {
-        // Use device window dimensions, but account for orientation
-        const deviceWidth = Math.max(window.width, window.height);
-        const deviceHeight = Math.min(window.width, window.height);
-        // Accept if image is at most as large as device in both dimensions, regardless of orientation
-        return (
-          (img.width <= deviceWidth && img.height <= deviceHeight) ||
-          (img.width <= deviceHeight && img.height <= deviceWidth)
-        );
-      })
-    : images;
+  // Memoize filtered images calculation
+  const filteredImages = useMemo(() => {
+    if (!filterByResolution) return images;
+
+    return images.filter((img) => {
+      // Use device window dimensions, but account for orientation
+      const deviceWidth = Math.max(window.width, window.height);
+      const deviceHeight = Math.min(window.width, window.height);
+      // Accept if image is at most as large as device in both dimensions, regardless of orientation
+      return (
+        (img.width <= deviceWidth && img.height <= deviceHeight) ||
+        (img.width <= deviceHeight && img.height <= deviceWidth)
+      );
+    });
+  }, [images, filterByResolution, window.width, window.height]);
+  // Memoized render function for FlatList
+  const renderItem = useCallback(
+    ({ item }: { item: Wallpaper }) => (
+      <WallpaperItem
+        item={item}
+        IMAGE_WIDTH={IMAGE_WIDTH}
+        IMAGE_HEIGHT_RATIO={IMAGE_HEIGHT_RATIO}
+        numColumns={numColumns}
+        handleDownload={handleDownload}
+        downloadingId={downloadingId}
+        handleFavorite={handleFavorite}
+        favorites={favorites}
+        handleShare={handleShare}
+        onPreview={setPreviewUrl}
+      />
+    ),
+    [
+      IMAGE_WIDTH,
+      numColumns,
+      handleDownload,
+      downloadingId,
+      handleFavorite,
+      favorites,
+      handleShare,
+    ]
+  );
+
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({
+      length: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 60,
+      offset: (IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 60) * index,
+      index,
+    }),
+    [IMAGE_WIDTH]
+  );
+
   return (
     <>
       <FlatList
@@ -363,23 +416,13 @@ export default function HomeScreen() {
           paddingTop: 0,
           paddingBottom: 32,
         }}
-        renderItem={({ item }) => (
-          <WallpaperItem
-            item={item}
-            IMAGE_WIDTH={IMAGE_WIDTH}
-            IMAGE_HEIGHT_RATIO={IMAGE_HEIGHT_RATIO}
-            numColumns={numColumns}
-            handleDownload={handleDownload}
-            downloadingId={downloadingId}
-            handleFavorite={handleFavorite}
-            favorites={favorites}
-            handleShare={handleShare}
-            onPreview={setPreviewUrl}
-          />
-        )}
+        renderItem={renderItem}
         removeClippedSubviews={true}
-        initialNumToRender={6}
-        windowSize={7}
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={10}
+        updateCellsBatchingPeriod={50}
+        getItemLayout={numColumns === 1 ? getItemLayout : undefined}
         ListHeaderComponent={
           <>
             <View
