@@ -78,6 +78,17 @@ const WallpaperItem = React.memo(function WallpaperItem({
     [favorites, item.id]
   );
 
+  // Calculate dynamic height based on image aspect ratio, with reasonable bounds
+  const imageHeight = useMemo(() => {
+    if (item.width && item.height) {
+      const aspectRatio = item.height / item.width;
+      // Clamp aspect ratio between 0.8 and 2.0 for reasonable display
+      const clampedRatio = Math.min(Math.max(aspectRatio, 0.8), 2.0);
+      return IMAGE_WIDTH * clampedRatio;
+    }
+    return IMAGE_WIDTH * IMAGE_HEIGHT_RATIO; // Fallback
+  }, [item.width, item.height, IMAGE_WIDTH]);
+
   const handleImagePress = useCallback(() => {
     onPreview(item.url);
   }, [onPreview, item.url]);
@@ -113,13 +124,13 @@ const WallpaperItem = React.memo(function WallpaperItem({
             source={{ uri: item.url }}
             style={{
               width: IMAGE_WIDTH,
-              height: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO,
+              height: imageHeight, // Use dynamic height instead of fixed ratio
               borderRadius: 12,
               backgroundColor: imgLoading ? "#000" : "#111",
             }}
             onLoadStart={() => setImgLoading(true)}
             onLoadEnd={() => setImgLoading(false)}
-            resizeMode="cover"
+            resizeMode="contain" // Changed from "cover" to "contain" to show full image
           />
           {imgLoading && (
             <View
@@ -128,7 +139,7 @@ const WallpaperItem = React.memo(function WallpaperItem({
                 left: 0,
                 top: 0,
                 width: IMAGE_WIDTH,
-                height: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO,
+                height: imageHeight, // Use dynamic height for loading overlay too
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: "#000",
@@ -178,14 +189,23 @@ const WallpaperItem = React.memo(function WallpaperItem({
 });
 
 const IMAGE_MARGIN = 14; // Increased gap
-const IMAGE_HEIGHT_RATIO = 0.55; // Slightly shorter images
+const IMAGE_HEIGHT_RATIO = 1; // Taller aspect ratio to show full wallpapers
 const SCREEN_WIDTH = Dimensions.get("window").width;
+
+// Post order options for filtering - simplified for app consistency
+const POST_ORDER_OPTIONS = [
+  { label: "🔥 Hot", value: "hot", description: "Trending" },
+  { label: "⭐ Top", value: "top", description: "Best" },
+  { label: "🆕 New", value: "new", description: "Latest" },
+  { label: "📈 Rising", value: "rising", description: "Popular" },
+];
 
 export default function HomeScreen() {
   const window = useWindowDimensions();
   const { subreddits, filterByResolution } = useSettings();
   // Always use 'all' as the duration
   const duration = "all";
+  const [postOrder, setPostOrder] = useState<string>("top"); // Default to top posts
   const [images, setImages] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
@@ -209,10 +229,11 @@ export default function HomeScreen() {
   const [afterMap, setAfterMap] = useState<Record<string, string | null>>({});
 
   // Memoize responsive calculations
-  const { numColumns, IMAGE_WIDTH } = useMemo(() => {
+  const { numColumns, IMAGE_WIDTH, isSmallScreen } = useMemo(() => {
     const cols = window.width < 500 ? 1 : 2;
     const width = Math.floor((window.width - IMAGE_MARGIN * (cols + 1)) / cols);
-    return { numColumns: cols, IMAGE_WIDTH: width };
+    const small = window.width < 400; // Define small screen threshold
+    return { numColumns: cols, IMAGE_WIDTH: width, isSmallScreen: small };
   }, [window.width]);
   /**
    * Fetch the first page for all subreddit/time combos (reset = true), or next page for each (reset = false).
@@ -234,7 +255,7 @@ export default function HomeScreen() {
       )({
         subreddits: srList,
         timeRanges,
-        postType: "top",
+        postType: postOrder, // Use selected post order instead of hardcoded "top"
         limit: 30,
         after: reset ? {} : afterMap,
       });
@@ -262,7 +283,7 @@ export default function HomeScreen() {
       fetchAll(true); // Reset images and afterMap
     }
     // eslint-disable-next-line
-  }, [duration, subreddits?.join(",")]);
+  }, [duration, subreddits?.join(","), postOrder]);
   /**
    * Fetch the next page for each subreddit/time combo using afterMap.
    * Appends new images, updates afterMap, disables button if all afterMap values are null.
@@ -284,7 +305,7 @@ export default function HomeScreen() {
       )({
         subreddits: srList,
         timeRanges,
-        postType: "top",
+        postType: postOrder, // Use selected post order
         limit: 30,
         after: afterMap,
       });
@@ -301,6 +322,12 @@ export default function HomeScreen() {
   };
 
   // Memoized handler functions
+  const handlePostOrderChange = useCallback((newOrder: string) => {
+    setPostOrder(newOrder);
+    // Show loading state when changing filter
+    setLoading(true);
+  }, []);
+
   const handleDownload = useCallback(
     async (url: string, id: string, width?: number, height?: number) => {
       setDownloadingId(id);
@@ -443,6 +470,73 @@ export default function HomeScreen() {
             <ThemedView style={styles.titleContainer}>
               <ThemedText type="title">Reddit Wallpapers</ThemedText>
             </ThemedView>
+
+            {/* Enhanced Post Order Filter - Optimized for Small Screens */}
+            <ThemedView
+              style={[
+                styles.filterContainer,
+                isSmallScreen && styles.filterContainerSmall,
+              ]}
+            >
+              <View style={styles.filterHeader}>
+                <View style={styles.filterTitleSection}>
+                  <ThemedText
+                    style={[
+                      styles.filterLabel,
+                      isSmallScreen && styles.filterLabelSmall,
+                    ]}
+                  >
+                    Sort by
+                  </ThemedText>
+                  {!loading && images.length > 0 && (
+                    <ThemedText style={styles.filterSubtitle}>
+                      {filteredImages.length} wallpapers
+                    </ThemedText>
+                  )}
+                </View>
+                {loading && (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#0a7ea4" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.filterRow}>
+                {POST_ORDER_OPTIONS.map((option, index) => {
+                  const isActive = postOrder === option.value;
+
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.filterPill,
+                        isSmallScreen && styles.filterPillSmall,
+                        isActive && styles.filterPillActive,
+                        loading && styles.filterPillDisabled,
+                        { flex: 1, marginHorizontal: isSmallScreen ? 1 : 2 },
+                      ]}
+                      onPress={() => handlePostOrderChange(option.value)}
+                      accessibilityLabel={`Sort by ${option.label} - ${option.description}`}
+                      disabled={loading}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.filterPillContent}>
+                        <ThemedText
+                          style={[
+                            styles.filterPillText,
+                            isSmallScreen && styles.filterPillTextSmall,
+                            isActive && styles.filterPillTextActive,
+                          ]}
+                        >
+                          {isSmallScreen
+                            ? option.label.split(" ")[0]
+                            : option.label}
+                        </ThemedText>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ThemedView>
             {loading && (
               <View style={styles.centered}>
                 <ActivityIndicator size="large" />
@@ -549,5 +643,122 @@ const styles = StyleSheet.create({
   pickerItem: {
     fontSize: 16,
     color: "#0a7ea4",
+  },
+  filterContainer: {
+    marginBottom: 12,
+    padding: 10,
+    backgroundColor: "#23272e", // Match app's dark background
+    borderRadius: 10,
+    marginHorizontal: 4,
+    // Subtle shadow matching app style
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  filterLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#0a7ea4", // Match app's primary blue
+  },
+  filterSubtitle: {
+    fontSize: 11,
+    color: "#888", // Match app's muted text
+    marginTop: 1,
+  },
+  filterTitleSection: {
+    flex: 1,
+  },
+  filterHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  filterInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  countBadge: {
+    backgroundColor: "#0a7ea4", // Match app's primary color
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 28,
+    alignItems: "center",
+  },
+  loadingContainer: {
+    width: 28,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imageCount: {
+    fontSize: 11,
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 4, // Reduced gap for smaller screens
+  },
+  filterPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "#353b48", // Match app's dark pill color
+    minHeight: 36, // Reduced height for mobile
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  filterPillActive: {
+    backgroundColor: "#0a7ea4", // Match app's active state
+  },
+  filterPillDisabled: {
+    opacity: 0.6,
+  },
+  filterPillContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  filterPillText: {
+    fontSize: 11, // Reduced font size for mobile
+    fontWeight: "600",
+    color: "#fff", // Consistent white text
+    textAlign: "center",
+  },
+  filterPillTextActive: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  filterPillDescription: {
+    fontSize: 8, // Smaller description text
+    color: "#ccc", // Lighter gray for description
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  filterPillDescriptionActive: {
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  // Small screen optimizations
+  filterContainerSmall: {
+    padding: 8,
+    marginBottom: 10,
+    borderRadius: 8,
+  },
+  filterLabelSmall: {
+    fontSize: 14,
+  },
+  filterPillSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minHeight: 32,
+    borderRadius: 8,
+  },
+  filterPillTextSmall: {
+    fontSize: 10,
   },
 });

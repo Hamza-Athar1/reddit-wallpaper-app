@@ -16,6 +16,38 @@ import { useDebounce } from "@/hooks/useDebounce";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image as ExpoImage } from "expo-image";
 
+// Utility function to extract subreddit name from various URL formats
+const extractSubredditFromUrl = (input: string): string => {
+  const trimmed = input.trim();
+
+  // Direct subreddit name (e.g., "earthporn" or "r/earthporn")
+  if (!trimmed.includes("http") && !trimmed.includes("reddit.com")) {
+    return trimmed.replace(/^r\//, "");
+  }
+
+  // Reddit URL patterns
+  const urlPatterns = [
+    // https://www.reddit.com/r/earthporn/
+    /reddit\.com\/r\/([^\/\?#]+)/i,
+    // https://old.reddit.com/r/earthporn
+    /old\.reddit\.com\/r\/([^\/\?#]+)/i,
+    // https://new.reddit.com/r/earthporn
+    /new\.reddit\.com\/r\/([^\/\?#]+)/i,
+    // Mobile URLs like https://m.reddit.com/r/earthporn
+    /m\.reddit\.com\/r\/([^\/\?#]+)/i,
+  ];
+
+  for (const pattern of urlPatterns) {
+    const match = trimmed.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  // If no pattern matches, return the original input (cleaned)
+  return trimmed.replace(/^r\//, "");
+};
+
 const DURATION_OPTIONS = [
   { label: "Hour", value: "hour" },
   { label: "Day", value: "day" },
@@ -48,6 +80,7 @@ export default function SettingsScreen() {
   const [newSubreddit, setNewSubreddit] = React.useState("");
   // Remove old suggestions state (string[])
   const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const [isUrlDetected, setIsUrlDetected] = React.useState(false);
   const debouncedSubreddit = useDebounce(newSubreddit, 300);
 
   // Fetch subreddit suggestions (improved: show similar names, allow click to add)
@@ -108,7 +141,9 @@ export default function SettingsScreen() {
 
   // Limit to 5 subreddits
   const addSubreddit = async (sub?: string) => {
-    const subreddit = (sub || newSubreddit).trim().replace(/^r\//, "");
+    const rawInput = sub || newSubreddit;
+    const subreddit = extractSubredditFromUrl(rawInput).trim();
+
     if (subreddit && !subreddits.includes(subreddit)) {
       if (subreddits.length >= 5) {
         alert("You can only add up to 5 subreddits.");
@@ -120,6 +155,11 @@ export default function SettingsScreen() {
       setNewSubreddit("");
       setSuggestions([]);
       setShowSuggestions(false);
+      setIsUrlDetected(false);
+    } else if (subreddit && subreddits.includes(subreddit)) {
+      alert(`r/${subreddit} is already in your list.`);
+      setNewSubreddit("");
+      setIsUrlDetected(false);
     }
   };
   const removeSubreddit = async (sub: string) => {
@@ -159,35 +199,74 @@ export default function SettingsScreen() {
             onChangeText={(text) => {
               setNewSubreddit(text);
               setShowSuggestions(true);
+
+              // Check if input looks like a URL
+              const isUrl =
+                text.includes("reddit.com") || text.includes("http");
+              setIsUrlDetected(isUrl);
             }}
-            placeholder="Add subreddit (e.g. earthporn)"
-            style={styles.input}
+            placeholder="Add subreddit (e.g. earthporn) or paste Reddit URL"
+            style={[styles.input, isUrlDetected && styles.inputWithUrl]}
             autoCapitalize="none"
             onSubmitEditing={() => addSubreddit()}
             returnKeyType="done"
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             editable={subreddits.length < 5}
+            multiline={false}
+            textContentType="URL"
           />
-          {/* Add button can be removed if not needed */}
+
+          {/* Show extracted subreddit name when URL is detected */}
+          {isUrlDetected && newSubreddit.trim() && (
+            <View style={styles.urlPreview}>
+              <ThemedText style={styles.urlPreviewText}>
+                📎 Will add: r/{extractSubredditFromUrl(newSubreddit)}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* Helper text */}
+          {subreddits.length < 5 && (
+            <ThemedText style={styles.helperText}>
+              💡 Tip: You can paste Reddit URLs like reddit.com/r/earthporn
+            </ThemedText>
+          )}
+
+          {/* Suggestions dropdown */}
           {(showSuggestions || newSubreddit.length > 1) &&
             suggestions.length > 0 && (
               <View
                 style={[
                   styles.suggestionDropdown,
-                  { maxHeight: 480, bottom: undefined, top: 44 },
+                  {
+                    maxHeight: Math.min(suggestions.length * 60, 240), // Dynamic height based on content
+                    minHeight: 60,
+                    bottom: undefined,
+                    top: 44,
+                  },
                 ]}
               >
                 <ScrollView
-                  style={{ maxHeight: 480 }}
-                  contentContainerStyle={{ flexGrow: 1 }}
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{
+                    paddingVertical: 4,
+                    flexGrow: 1,
+                  }}
                   keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                  scrollEnabled={true}
+                  nestedScrollEnabled={true}
+                  bounces={false}
+                  overScrollMode="never"
+                  removeClippedSubviews={false}
                 >
                   {suggestions.map((sub: SubredditSuggestion) => (
                     <TouchableOpacity
                       key={sub.name}
                       style={styles.suggestionItem}
                       onPress={() => addSubreddit(sub.name)}
+                      activeOpacity={0.7}
                     >
                       <View
                         style={{
@@ -209,7 +288,7 @@ export default function SettingsScreen() {
                             contentFit="cover"
                           />
                         ) : null}
-                        <View>
+                        <View style={{ flex: 1 }}>
                           <ThemedText style={styles.suggestionText}>
                             r/{sub.name}
                           </ThemedText>
@@ -279,7 +358,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     backgroundColor: "#23272e", // dark background
-    overflow: "hidden",
+    overflow: "visible", // Allow dropdown to overflow
   },
   sectionHeader: {
     marginBottom: 8,
@@ -303,6 +382,10 @@ const styles = StyleSheet.create({
     height: 36,
     backgroundColor: "#181a20", // dark input
     color: "#fff",
+  },
+  inputWithUrl: {
+    borderColor: "#0a7ea4",
+    borderWidth: 2,
   },
   addButton: {
     backgroundColor: "#0a7ea4",
@@ -378,17 +461,39 @@ const styles = StyleSheet.create({
     // boxShadow for web compatibility, replaces shadow* props
     boxShadow: "0px 4px 12px rgba(0,0,0,0.16)",
     elevation: 20, // much higher z-index
-    zIndex: 100,
+    zIndex: 1000, // Very high z-index to ensure it appears above everything
     paddingVertical: 4,
     borderWidth: 1,
     borderColor: "#444",
   },
   suggestionItem: {
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 16,
+    minHeight: 60, // Ensure consistent item height
   },
   suggestionText: {
     color: "#fff",
     fontSize: 16,
+  },
+  urlPreview: {
+    backgroundColor: "#2a3441",
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: "#0a7ea4",
+  },
+  urlPreviewText: {
+    fontSize: 12,
+    color: "#0a7ea4",
+    fontWeight: "500",
+  },
+  helperText: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 4,
+    marginBottom: 8,
+    fontStyle: "italic",
   },
 });

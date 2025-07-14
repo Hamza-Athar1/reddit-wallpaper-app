@@ -9,11 +9,13 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "icon": "./assets/images/wall.png",
       "supportsTablet": true
     },
     "android": {
+      "icon": "./assets/images/wall.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/wall.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
