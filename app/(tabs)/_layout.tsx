@@ -38,11 +38,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="search"
         options={{
-          title: "Settings",
+          title: "Search",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="cog" size={28} color={color} />
+            <Ionicons name="search" size={28} color={color} />
           ),
         }}
       />
@@ -52,6 +52,15 @@ export default function TabLayout() {
           title: "Favorites",
           tabBarIcon: ({ color }) => (
             <Ionicons name="heart" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: "Settings",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="cog" size={28} color={color} />
           ),
         }}
       />
