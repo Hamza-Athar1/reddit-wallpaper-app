@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
 
 import { HapticTab } from "@/components/HapticTab";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import TabBarBackground from "@/components/ui/TabBarBackground";
 import { Colors } from "@/constants/Colors";
@@ -59,6 +60,12 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: "Settings",
+          headerShown: true,
+          headerRight: () => (
+            <View style={{ marginRight: 16 }}>
+              <ThemeToggle size="small" />
+            </View>
+          ),
           tabBarIcon: ({ color }) => (
             <Ionicons name="cog" size={28} color={color} />
           ),

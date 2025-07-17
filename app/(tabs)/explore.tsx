@@ -11,6 +11,7 @@ import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { useSettings } from "@/components/SettingsContext";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { ThemeSettings } from "@/components/ThemeSettings";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useDebounce } from "@/hooks/useDebounce";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -186,6 +187,13 @@ export default function SettingsScreen() {
 
       <ThemedView style={styles.section}>
         <ThemedText type="subtitle" style={styles.sectionHeader}>
+          Appearance
+        </ThemedText>
+        <ThemeSettings />
+      </ThemedView>
+
+      <ThemedView style={styles.section}>
+        <ThemedText type="subtitle" style={styles.sectionHeader}>
           Subreddits
         </ThemedText>
         <View
@@ -335,6 +343,12 @@ export default function SettingsScreen() {
             </View>
           ))}
         </View>
+      </ThemedView>
+      <ThemedView style={styles.themeSettingsContainer}>
+        <ThemedText type="subtitle" style={styles.themeSettingsHeader}>
+          Theme Settings
+        </ThemedText>
+        <ThemeSettings />
       </ThemedView>
       {/* Duration selection removed: now only available on the home page */}
     </ParallaxScrollView>
@@ -495,5 +509,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     fontStyle: "italic",
+  },
+  themeSettingsContainer: {
+    marginTop: 32,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#23272e",
+  },
+  themeSettingsHeader: {
+    marginBottom: 16,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#0a7ea4",
   },
 });
