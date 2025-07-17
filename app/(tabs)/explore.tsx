@@ -7,14 +7,15 @@ import {
   View,
 } from "react-native";
 
+import { ColorSchemeSelector } from "@/components/ColorSchemeSelector";
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { useSettings } from "@/components/SettingsContext";
+import { SettingsDebugPanel } from "@/components/SettingsDebugPanel";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemeSettings } from "@/components/ThemeSettings";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useDebounce } from "@/hooks/useDebounce";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image as ExpoImage } from "expo-image";
 
 // Utility function to extract subreddit name from various URL formats
@@ -61,25 +62,8 @@ const DURATION_OPTIONS = [
 export default function SettingsScreen() {
   const { subreddits, setSubreddits } = useSettings();
 
-  // Persist subreddits to AsyncStorage
-  React.useEffect(() => {
-    AsyncStorage.setItem("user-subreddits", JSON.stringify(subreddits));
-  }, [subreddits]);
-
-  // Load subreddits from AsyncStorage on mount
-  React.useEffect(() => {
-    (async () => {
-      const saved = await AsyncStorage.getItem("user-subreddits");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) setSubreddits(parsed);
-        } catch {}
-      }
-    })();
-  }, []);
+  // Remove the duplicate persistence effects since SettingsContext handles this
   const [newSubreddit, setNewSubreddit] = React.useState("");
-  // Remove old suggestions state (string[])
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const [isUrlDetected, setIsUrlDetected] = React.useState(false);
   const debouncedSubreddit = useDebounce(newSubreddit, 300);
@@ -151,8 +135,7 @@ export default function SettingsScreen() {
         return;
       }
       const updated = [...subreddits, subreddit];
-      setSubreddits(updated);
-      await AsyncStorage.setItem("user-subreddits", JSON.stringify(updated));
+      setSubreddits(updated); // SettingsContext will handle persistence
       setNewSubreddit("");
       setSuggestions([]);
       setShowSuggestions(false);
@@ -163,10 +146,10 @@ export default function SettingsScreen() {
       setIsUrlDetected(false);
     }
   };
+
   const removeSubreddit = async (sub: string) => {
     const updated = subreddits.filter((s) => s !== sub);
-    setSubreddits(updated);
-    await AsyncStorage.setItem("user-subreddits", JSON.stringify(updated));
+    setSubreddits(updated); // SettingsContext will handle persistence
   };
 
   return (
@@ -190,6 +173,13 @@ export default function SettingsScreen() {
           Appearance
         </ThemedText>
         <ThemeSettings />
+      </ThemedView>
+
+      <ThemedView style={styles.section}>
+        <ThemedText type="subtitle" style={styles.sectionHeader}>
+          Color Scheme
+        </ThemedText>
+        <ColorSchemeSelector />
       </ThemedView>
 
       <ThemedView style={styles.section}>
@@ -344,12 +334,10 @@ export default function SettingsScreen() {
           ))}
         </View>
       </ThemedView>
-      <ThemedView style={styles.themeSettingsContainer}>
-        <ThemedText type="subtitle" style={styles.themeSettingsHeader}>
-          Theme Settings
-        </ThemedText>
-        <ThemeSettings />
-      </ThemedView>
+
+      {/* Debug panel to verify settings persistence */}
+      <SettingsDebugPanel />
+
       {/* Duration selection removed: now only available on the home page */}
     </ParallaxScrollView>
   );
@@ -509,17 +497,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     fontStyle: "italic",
-  },
-  themeSettingsContainer: {
-    marginTop: 32,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#23272e",
-  },
-  themeSettingsHeader: {
-    marginBottom: 16,
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#0a7ea4",
   },
 });

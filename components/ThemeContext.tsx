@@ -1,6 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Appearance, ColorSchemeName } from "react-native";
+import {
+  applyColorSchemeToTheme,
+  useColorScheme as useColorSchemeManager,
+} from "./ColorSchemeContext";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -121,6 +125,24 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     Appearance.getColorScheme()
   );
 
+  // Get the current color scheme from ColorSchemeContext (with fallback)
+  let colorSchemeManager;
+  try {
+    colorSchemeManager = useColorSchemeManager();
+  } catch {
+    // Fallback for when ColorSchemeProvider is not available
+    colorSchemeManager = {
+      currentColorScheme: {
+        id: "default",
+        name: "default",
+        displayName: "Default",
+        primary: "#0a7ea4",
+        accent: "#0a7ea4",
+        isCustom: false,
+      },
+    };
+  }
+
   // Load saved theme preference
   useEffect(() => {
     const loadThemePreference = async () => {
@@ -160,7 +182,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const isDark =
     themeMode === "dark" ||
     (themeMode === "system" && systemColorScheme === "dark");
-  const theme = isDark ? darkTheme : lightTheme;
+
+  // Apply color scheme to base theme
+  const baseTheme = isDark ? darkTheme : lightTheme;
+  const theme = applyColorSchemeToTheme(
+    baseTheme,
+    colorSchemeManager.currentColorScheme
+  );
 
   // Toggle between light and dark (doesn't affect system mode)
   const toggleTheme = () => {

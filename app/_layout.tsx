@@ -8,6 +8,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 
+import { ColorSchemeProvider } from "@/components/ColorSchemeContext";
 import { SettingsProvider } from "@/components/SettingsContext";
 import { ThemeProvider, useTheme } from "@/components/ThemeContext";
 
@@ -38,8 +39,10 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <RootLayoutNav />
-    </ThemeProvider>
+    <ColorSchemeProvider>
+      <ThemeProvider>
+        <RootLayoutNav />
+      </ThemeProvider>
+    </ColorSchemeProvider>
   );
 }

@@ -298,8 +298,8 @@ const calculateAspectRatio = (width: number, height: number): string => {
 
 ## 📋 Feature Completion Tracking
 
-- [ ] Dark/Light Theme Toggle
-- [ ] Custom Color Schemes
+- [x] Dark/Light Theme Toggle
+- [x] Custom Color Schemes
 - [ ] Grid Layout Options
 - [ ] Advanced Search
 - [ ] Trending/Recommended Section
