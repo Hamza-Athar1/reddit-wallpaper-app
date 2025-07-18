@@ -88,8 +88,8 @@ export default function HomeScreen() {
     return { numColumns: cols, IMAGE_WIDTH: width, isSmallScreen: small };
   }, [window.width]);
   /**
-   * Fetch the first page for all subreddit/time combos (reset = true), or next page for each (reset = false).
-   * On reset, replaces images and afterMap. Otherwise, appends new images and updates afterMap.
+   * Fetch wallpapers from multiple time ranges for unlimited variety.
+   * This fetches from all available time periods to give users maximum wallpapers.
    */
   const fetchAll = async (reset = false) => {
     setLoading(true);
@@ -100,44 +100,110 @@ export default function HomeScreen() {
       const srList =
         Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
           ? loaded.subreddits
-          : subreddits || ["wallpapers"];
-      const timeRanges = [duration];
-      const { images: fetchedImages, after: newAfterMap } = await (
-        fetchExtendedWallpapers as any
-      )({
+          : subreddits?.length > 0
+          ? subreddits
+          : ["wallpapers", "earthporn", "natureporn"]; // Multiple fallback subreddits
+
+      console.log(
+        "Fetching wallpapers for subreddits:",
+        srList,
+        "Post order:",
+        postOrder
+      );
+
+      // Start with "week" time range for reliable fetching, then expand
+      const timeRanges = ["week"];
+
+      const fetchResult = await (fetchExtendedWallpapers as any)({
         subreddits: srList,
         timeRanges,
         postType: postOrder, // Use selected post order instead of hardcoded "top"
-        limit: 30,
+        limit: 50, // Start with reasonable limit for testing
         after: reset ? {} : afterMap,
       });
+
+      const { images: fetchedImages, after: newAfterMap } = fetchResult;
+
+      console.log("Fetched images count:", fetchedImages?.length || 0);
+      console.log("After map:", newAfterMap);
+
       if (reset) {
         setImages(Array.isArray(fetchedImages) ? fetchedImages : []);
       } else {
         setImages((prev: Wallpaper[]) => {
           const ids = new Set(prev.map((i: Wallpaper) => i.id));
-          return [
-            ...prev,
-            ...fetchedImages.filter((i: Wallpaper) => !ids.has(i.id)),
-          ];
+          const newUniqueImages = fetchedImages.filter(
+            (i: Wallpaper) => !ids.has(i.id)
+          );
+          console.log("Adding", newUniqueImages.length, "new unique images");
+          return [...prev, ...newUniqueImages];
         });
       }
       setAfterMap(newAfterMap);
-    } catch (e) {
-      setError("Failed to load images.");
+
+      // If we got fewer than expected images, try expanding time ranges for unlimited content
+      if (reset && fetchedImages.length < 20) {
+        console.log(
+          "Got few images, attempting to fetch from more time ranges..."
+        );
+        setTimeout(() => {
+          fetchMoreTimeRanges();
+        }, 1000);
+      }
+    } catch (e: any) {
+      console.error("Error fetching wallpapers:", e);
+
+      // Try fallback simple fetch
+      console.log("Attempting fallback fetch...");
+      try {
+        const srList =
+          subreddits?.length > 0 ? subreddits : ["wallpapers", "earthporn"];
+        const fallbackImages: Wallpaper[] = [];
+
+        for (const subreddit of srList.slice(0, 3)) {
+          // Limit to 3 subreddits for fallback
+          const images = await simpleFetch(subreddit, postOrder);
+          fallbackImages.push(...images);
+        }
+
+        console.log("Fallback fetch got", fallbackImages.length, "images");
+
+        if (fallbackImages.length > 0) {
+          if (reset) {
+            setImages(fallbackImages);
+          } else {
+            setImages((prev: Wallpaper[]) => {
+              const ids = new Set(prev.map((i: Wallpaper) => i.id));
+              return [
+                ...prev,
+                ...fallbackImages.filter((i: Wallpaper) => !ids.has(i.id)),
+              ];
+            });
+          }
+          setAfterMap({}); // Reset after map for fallback
+          return; // Success with fallback
+        }
+      } catch (fallbackError) {
+        console.error("Fallback fetch also failed:", fallbackError);
+      }
+
+      setError(
+        `Failed to load images: ${
+          e?.message || "Network error"
+        }. Please check your internet connection.`
+      );
     } finally {
       setLoading(false);
     }
   };
-  // Initial fetch and on duration/subreddits change
+  // Initial fetch and on subreddits/postOrder change
   useEffect(() => {
-    if (subreddits && subreddits.length > 0) {
-      fetchAll(true); // Reset images and afterMap
-    }
+    // Always try to fetch, even if subreddits array is empty (will use default "wallpapers")
+    fetchAll(true); // Reset images and afterMap
     // eslint-disable-next-line
-  }, [duration, subreddits?.join(","), postOrder]);
+  }, [subreddits?.join(","), postOrder]);
   /**
-   * Fetch the next page for each subreddit/time combo using afterMap.
+   * Load more wallpapers from all time ranges.
    * Appends new images, updates afterMap, disables button if all afterMap values are null.
    */
   const loadMore = async () => {
@@ -151,14 +217,17 @@ export default function HomeScreen() {
         Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
           ? loaded.subreddits
           : subreddits || ["wallpapers"];
-      const timeRanges = [duration];
+
+      // Start with "week" time range for reliable fetching, then expand
+      const timeRanges = ["week"];
+
       const { images: newImages, after: newAfterMap } = await (
         fetchExtendedWallpapers as any
       )({
         subreddits: srList,
         timeRanges,
         postType: postOrder, // Use selected post order
-        limit: 30,
+        limit: 50, // Start with reasonable limit for testing
         after: afterMap,
       });
       setImages((prev: Wallpaper[]) => {
@@ -167,9 +236,62 @@ export default function HomeScreen() {
       });
       setAfterMap(newAfterMap);
     } catch (e) {
+      console.error("Error loading more wallpapers:", e);
       // Optionally show error
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  // Function to fetch from additional time ranges for unlimited content
+  const fetchMoreTimeRanges = async () => {
+    try {
+      console.log(
+        "Fetching from additional time ranges for unlimited content..."
+      );
+      const settings = await import("../../components/settings-storage");
+      const loaded = await settings.loadSettings();
+      const srList =
+        Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
+          ? loaded.subreddits
+          : subreddits?.length > 0
+          ? subreddits
+          : ["wallpapers", "earthporn", "natureporn"];
+
+      // Fetch from additional time ranges for unlimited variety
+      const additionalTimeRanges = ["day", "month", "year", "all"];
+
+      const fetchResult = await (fetchExtendedWallpapers as any)({
+        subreddits: srList,
+        timeRanges: additionalTimeRanges,
+        postType: postOrder,
+        limit: 75, // Higher limit for additional content
+        after: {}, // Start fresh for additional time ranges
+      });
+
+      const { images: additionalImages } = fetchResult;
+      console.log(
+        "Additional time ranges fetched:",
+        additionalImages?.length || 0,
+        "images"
+      );
+
+      if (additionalImages?.length > 0) {
+        setImages((prev: Wallpaper[]) => {
+          const ids = new Set(prev.map((i: Wallpaper) => i.id));
+          const newUniqueImages = additionalImages.filter(
+            (i: Wallpaper) => !ids.has(i.id)
+          );
+          console.log(
+            "Adding",
+            newUniqueImages.length,
+            "additional unique images"
+          );
+          return [...prev, ...newUniqueImages];
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching additional time ranges:", error);
     }
   };
 
@@ -321,6 +443,9 @@ export default function HomeScreen() {
             </View>
             <ThemedView style={styles.titleContainer}>
               <ThemedText type="title">Reddit Wallpapers</ThemedText>
+              <ThemedText style={styles.subtitle}>
+                Unlimited collection from all time periods
+              </ThemedText>
             </ThemedView>
 
             {/* Enhanced Post Order Filter - Optimized for Small Screens */}
@@ -342,7 +467,7 @@ export default function HomeScreen() {
                   </ThemedText>
                   {!loading && images.length > 0 && (
                     <ThemedText style={styles.filterSubtitle}>
-                      {filteredImages.length} wallpapers
+                      {filteredImages.length} wallpapers from all time periods
                     </ThemedText>
                   )}
                 </View>
@@ -396,12 +521,47 @@ export default function HomeScreen() {
             )}
             {error && (
               <View style={styles.centered}>
-                <ThemedText>{error}</ThemedText>
+                <ThemedText
+                  style={{
+                    color: "red",
+                    textAlign: "center",
+                    paddingHorizontal: 20,
+                  }}
+                >
+                  {error}
+                </ThemedText>
+                <TouchableOpacity
+                  onPress={() => fetchAll(true)}
+                  style={{
+                    backgroundColor: "#0a7ea4",
+                    padding: 10,
+                    borderRadius: 8,
+                    marginTop: 10,
+                  }}
+                >
+                  <ThemedText style={{ color: "white" }}>Retry</ThemedText>
+                </TouchableOpacity>
               </View>
             )}
             {!loading && !error && images.length === 0 && (
               <View style={styles.centered}>
-                <ThemedText>No wallpapers found.</ThemedText>
+                <ThemedText
+                  style={{ textAlign: "center", paddingHorizontal: 20 }}
+                >
+                  No wallpapers found. Check your internet connection or try
+                  different subreddits.
+                </ThemedText>
+                <TouchableOpacity
+                  onPress={() => fetchAll(true)}
+                  style={{
+                    backgroundColor: "#0a7ea4",
+                    padding: 10,
+                    borderRadius: 8,
+                    marginTop: 10,
+                  }}
+                >
+                  <ThemedText style={{ color: "white" }}>Retry</ThemedText>
+                </TouchableOpacity>
               </View>
             )}
           </>
@@ -447,12 +607,18 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 4,
     marginBottom: 16,
     // If you want a shadow, use boxShadow for web compatibility
     // boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#888",
+    fontStyle: "italic",
+    marginTop: 2,
   },
   reactLogo: {
     height: 178,
@@ -614,3 +780,61 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
 });
+
+// Simple fallback fetch function in case the main fetch fails
+const simpleFetch = async (subreddit: string, postType: string = "top") => {
+  try {
+    const url = `https://www.reddit.com/r/${subreddit}/${postType}.json?limit=25&t=week&raw_json=1`;
+    console.log("Fallback fetch from:", url);
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Reddit-Wallpaper-App/1.0",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.data?.children) {
+      return [];
+    }
+
+    return data.data.children
+      .map((c: any) => c.data)
+      .filter((p: any) => {
+        return (
+          p.post_hint === "image" &&
+          p.preview?.images?.[0]?.source?.url &&
+          !p.over_18 &&
+          !p.url.includes("gif")
+        );
+      })
+      .map((p: any) => {
+        const source = p.preview.images[0].source;
+        return {
+          id: p.id,
+          title: p.title?.trim() || "Untitled",
+          url: p.url.replace(/&amp;/g, "&"),
+          width: source.width,
+          height: source.height,
+          preview:
+            p.preview.images[0].resolutions?.[0]?.url?.replace(/&amp;/g, "&") ||
+            null,
+          subreddit,
+          time: "week",
+          postType,
+          created_utc: p.created_utc,
+          score: p.score || 0,
+          author: p.author,
+          permalink: p.permalink,
+        };
+      });
+  } catch (error) {
+    console.error("Simple fetch failed for", subreddit, error);
+    return [];
+  }
+};

@@ -23,8 +23,11 @@ async function fetchExtendedWallpapers({
   limit = 50,
   after = {},
 } = {}) {
+  console.log("fetchExtendedWallpapers called with:", { subreddits, timeRanges, postType, limit });
+  
   // Input validation
   if (!Array.isArray(subreddits) || subreddits.length === 0) {
+    console.log("No subreddits provided, returning empty result");
     return { images: [], after: {} };
   }
 
@@ -55,6 +58,8 @@ async function fetchExtendedWallpapers({
         
         if (afterToken) url += `&after=${afterToken}`;
 
+        console.log(`Fetching from: ${url}`);
+
         // Add timeout and better error handling
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -67,6 +72,8 @@ async function fetchExtendedWallpapers({
         });
 
         clearTimeout(timeoutId);
+
+        console.log(`Response status for r/${subreddit} (${time}): ${res.status}`);
 
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -173,6 +180,8 @@ async function fetchExtendedWallpapers({
 
   // Sort by score for better quality results
   dedupedImages.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  console.log(`Final result: ${dedupedImages.length} unique images from ${subreddits.length} subreddits`);
 
   return { 
     images: dedupedImages, 
