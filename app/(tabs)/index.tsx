@@ -4,6 +4,7 @@ import * as MediaLibrary from "expo-media-library";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   FlatList,
   Share,
@@ -20,6 +21,7 @@ import { useSettings } from "../../components/SettingsContext";
 import { ThemedText } from "../../components/ThemedText";
 import { ThemedView } from "../../components/ThemedView";
 import { WallpaperItem } from "../../components/WallpaperItem";
+import { useColorScheme } from "../../hooks/useColorScheme";
 import fetchExtendedWallpapers from "../../scripts/redditfetch";
 import ImagePreviewModal from "../ImagePreviewModal";
 
@@ -55,6 +57,9 @@ const POST_ORDER_OPTIONS = [
 export default function HomeScreen() {
   const window = useWindowDimensions();
   const { subreddits, filterByResolution } = useSettings();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  
   // Always use 'all' as the duration
   const duration = "all";
   const [postOrder, setPostOrder] = useState<string>("top"); // Default to top posts
@@ -65,6 +70,10 @@ export default function HomeScreen() {
   const [favorites, setFavorites] = useState<Wallpaper[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Animation states
+  const fadeAnim = React.useRef(new Animated.Value(1)).current;
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   // Load favorites from persistent storage on mount
   useEffect(() => {
@@ -489,7 +498,18 @@ export default function HomeScreen() {
                         isSmallScreen && styles.filterPillSmall,
                         isActive && styles.filterPillActive,
                         loading && styles.filterPillDisabled,
-                        { flex: 1, marginHorizontal: isSmallScreen ? 1 : 2 },
+                        { 
+                          flex: 1, 
+                          marginHorizontal: isSmallScreen ? 1 : 2,
+                          shadowColor: isDark ? "#000" : "#333",
+                          shadowOffset: {
+                            width: 0,
+                            height: isActive ? 4 : 2,
+                          },
+                          shadowOpacity: isActive ? 0.3 : 0.1,
+                          shadowRadius: isActive ? 6 : 3,
+                          elevation: isActive ? 6 : 2,
+                        },
                       ]}
                       onPress={() => handlePostOrderChange(option.value)}
                       accessibilityLabel={`Sort by ${option.label} - ${option.description}`}
@@ -508,6 +528,20 @@ export default function HomeScreen() {
                             ? option.label.split(" ")[0]
                             : option.label}
                         </ThemedText>
+                        {isActive && (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              bottom: -2,
+                              left: '50%',
+                              transform: [{ translateX: -6 }],
+                              width: 12,
+                              height: 3,
+                              backgroundColor: '#0a7ea4',
+                              borderRadius: 2,
+                            }}
+                          />
+                        )}
                       </View>
                     </TouchableOpacity>
                   );
@@ -515,54 +549,151 @@ export default function HomeScreen() {
               </View>
             </ThemedView>
             {loading && (
-              <View style={styles.centered}>
-                <ActivityIndicator size="large" />
+              <View style={[styles.centered, { paddingVertical: 40 }]}>
+                <ActivityIndicator size="large" color="#0a7ea4" />
+                <ThemedText style={{ 
+                  marginTop: 16, 
+                  color: isDark ? "#ccc" : "#666",
+                  fontSize: 16 
+                }}>
+                  Loading wallpapers...
+                </ThemedText>
               </View>
             )}
             {error && (
-              <View style={styles.centered}>
-                <ThemedText
-                  style={{
-                    color: "red",
-                    textAlign: "center",
-                    paddingHorizontal: 20,
-                  }}
-                >
-                  {error}
-                </ThemedText>
-                <TouchableOpacity
-                  onPress={() => fetchAll(true)}
-                  style={{
-                    backgroundColor: "#0a7ea4",
-                    padding: 10,
-                    borderRadius: 8,
-                    marginTop: 10,
-                  }}
-                >
-                  <ThemedText style={{ color: "white" }}>Retry</ThemedText>
-                </TouchableOpacity>
-              </View>
+              <Animated.View style={[
+                styles.centered, 
+                { 
+                  paddingVertical: 40,
+                  paddingHorizontal: 20,
+                  opacity: fadeAnim 
+                }
+              ]}>
+                <View style={{
+                  backgroundColor: isDark ? "#ff4444" : "#ffebee",
+                  borderRadius: 12,
+                  padding: 20,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: isDark ? "#ff6666" : "#ffcdd2",
+                }}>
+                  <ThemedText
+                    style={{
+                      color: isDark ? "#fff" : "#c62828",
+                      textAlign: "center",
+                      fontSize: 16,
+                      fontWeight: "500",
+                      marginBottom: 12,
+                    }}
+                  >
+                    Oops! Something went wrong
+                  </ThemedText>
+                  <ThemedText
+                    style={{
+                      color: isDark ? "#ffcccc" : "#d32f2f",
+                      textAlign: "center",
+                      fontSize: 14,
+                      marginBottom: 16,
+                    }}
+                  >
+                    {error}
+                  </ThemedText>
+                  <TouchableOpacity
+                    onPress={() => fetchAll(true)}
+                    style={{
+                      backgroundColor: "#0a7ea4",
+                      paddingHorizontal: 24,
+                      paddingVertical: 12,
+                      borderRadius: 25,
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.2,
+                      shadowRadius: 4,
+                      elevation: 4,
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <ThemedText style={{ 
+                      color: "white", 
+                      fontWeight: "600",
+                      fontSize: 16 
+                    }}>
+                      🔄 Try Again
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
             )}
             {!loading && !error && images.length === 0 && (
-              <View style={styles.centered}>
-                <ThemedText
-                  style={{ textAlign: "center", paddingHorizontal: 20 }}
-                >
-                  No wallpapers found. Check your internet connection or try
-                  different subreddits.
-                </ThemedText>
-                <TouchableOpacity
-                  onPress={() => fetchAll(true)}
-                  style={{
-                    backgroundColor: "#0a7ea4",
-                    padding: 10,
-                    borderRadius: 8,
-                    marginTop: 10,
-                  }}
-                >
-                  <ThemedText style={{ color: "white" }}>Retry</ThemedText>
-                </TouchableOpacity>
-              </View>
+              <Animated.View style={[
+                styles.centered, 
+                { 
+                  paddingVertical: 40,
+                  paddingHorizontal: 20,
+                  opacity: fadeAnim 
+                }
+              ]}>
+                <View style={{
+                  backgroundColor: isDark ? "#2a2a2a" : "#f5f5f5",
+                  borderRadius: 12,
+                  padding: 24,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: isDark ? "#444" : "#e0e0e0",
+                }}>
+                  <ThemedText style={{ 
+                    fontSize: 48, 
+                    marginBottom: 16 
+                  }}>
+                    🔍
+                  </ThemedText>
+                  <ThemedText
+                    style={{ 
+                      textAlign: "center", 
+                      fontSize: 18,
+                      fontWeight: "600",
+                      marginBottom: 8,
+                      color: isDark ? "#fff" : "#333"
+                    }}
+                  >
+                    No wallpapers found
+                  </ThemedText>
+                  <ThemedText
+                    style={{ 
+                      textAlign: "center", 
+                      fontSize: 14,
+                      color: isDark ? "#ccc" : "#666",
+                      marginBottom: 20,
+                      lineHeight: 20
+                    }}
+                  >
+                    Check your internet connection or try different subreddits in settings.
+                  </ThemedText>
+                  <TouchableOpacity
+                    onPress={() => fetchAll(true)}
+                    style={{
+                      backgroundColor: "#0a7ea4",
+                      paddingHorizontal: 24,
+                      paddingVertical: 12,
+                      borderRadius: 25,
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.2,
+                      shadowRadius: 4,
+                      elevation: 4,
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <ThemedText style={{ 
+                      color: "white", 
+                      fontWeight: "600",
+                      fontSize: 16 
+                    }}>
+                      🔄 Try Again
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
             )}
           </>
         }

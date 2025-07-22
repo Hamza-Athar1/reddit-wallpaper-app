@@ -1,5 +1,7 @@
 import React from "react";
 import {
+  Animated,
+  Platform,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -10,11 +12,11 @@ import {
 import { ColorSchemeSelector } from "@/components/ColorSchemeSelector";
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { useSettings } from "@/components/SettingsContext";
-import { SettingsDebugPanel } from "@/components/SettingsDebugPanel";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemeSettings } from "@/components/ThemeSettings";
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Image as ExpoImage } from "expo-image";
 
@@ -61,6 +63,8 @@ const DURATION_OPTIONS = [
 
 export default function SettingsScreen() {
   const { subreddits, setSubreddits } = useSettings();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   // Remove the duplicate persistence effects since SettingsContext handles this
   const [newSubreddit, setNewSubreddit] = React.useState("");
@@ -78,44 +82,145 @@ export default function SettingsScreen() {
   const [suggestions, setSuggestions] = React.useState<SubredditSuggestion[]>(
     []
   );
+  const [isLoading, setIsLoading] = React.useState(false);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(-10)).current;
+
+  // Animate suggestions in/out
+  React.useEffect(() => {
+    if (
+      (showSuggestions || newSubreddit.length > 1) &&
+      suggestions.length > 0
+    ) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: -10,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [showSuggestions, newSubreddit.length, suggestions.length]);
 
   React.useEffect(() => {
     let ignore = false;
     const fetchSuggestions = async () => {
       const query = debouncedSubreddit.trim();
+
       if (query.length < 2) {
         setSuggestions([]);
+        setIsLoading(false);
         return;
       }
+
+      setIsLoading(true);
+
+      // Fallback popular subreddits for development
+      const popularSubreddits = [
+        { name: "earthporn", title: "Earth Porn", subscribers: 22000000 },
+        { name: "spaceporn", title: "Space Porn", subscribers: 1500000 },
+        { name: "cityporn", title: "City Porn", subscribers: 800000 },
+        { name: "natureporn", title: "Nature Porn", subscribers: 600000 },
+        { name: "wallpapers", title: "Wallpapers", subscribers: 1800000 },
+        { name: "wallpaper", title: "Wallpaper", subscribers: 900000 },
+        { name: "nature", title: "Nature", subscribers: 2000000 },
+        { name: "pics", title: "Pictures and Images", subscribers: 29000000 },
+        { name: "photographs", title: "Photographs", subscribers: 400000 },
+        {
+          name: "itookapicture",
+          title: "I Took a Picture",
+          subscribers: 3000000,
+        },
+        {
+          name: "amoledbackgrounds",
+          title: "AMOLED Backgrounds",
+          subscribers: 1200000,
+        },
+        {
+          name: "mobilewallpaper",
+          title: "Mobile Wallpaper",
+          subscribers: 300000,
+        },
+        { name: "art", title: "Art", subscribers: 22000000 },
+        { name: "sunset", title: "Sunset", subscribers: 800000 },
+        { name: "sunrise", title: "Sunrise", subscribers: 200000 },
+      ];
+
       try {
-        const res = await fetch(
-          `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(
-            query
-          )}&limit=8`
-        );
-        const json = await res.json();
+        // Use CORS proxy for web development
+        const baseUrl = `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(
+          query
+        )}&limit=6`;
+        const url =
+          Platform.OS === "web"
+            ? `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`
+            : baseUrl;
+
+        const res = await fetch(url);
+
         if (ignore) return;
-        // Get display_name and title for better matching
-        const subs: SubredditSuggestion[] = (json.data?.children || [])
-          .map((c: any) => ({
-            name: c.data.display_name,
-            title: c.data.title,
-            icon: c.data.icon_img || c.data.community_icon || null,
-            subscribers:
-              typeof c.data.subscribers === "number"
-                ? c.data.subscribers
-                : null,
-          }))
+
+        if (res.ok) {
+          const json = await res.json();
+          const subs: SubredditSuggestion[] = (json.data?.children || [])
+            .map((c: any) => ({
+              name: c.data.display_name,
+              title: c.data.title,
+              icon: c.data.icon_img || c.data.community_icon || null,
+              subscribers:
+                typeof c.data.subscribers === "number"
+                  ? c.data.subscribers
+                  : null,
+            }))
+            .filter(
+              (sub: SubredditSuggestion) =>
+                (sub.name.toLowerCase().includes(query.toLowerCase()) ||
+                  (sub.title &&
+                    sub.title.toLowerCase().includes(query.toLowerCase()))) &&
+                !subreddits.includes(sub.name)
+            );
+          setSuggestions(subs);
+        } else {
+          throw new Error("API request failed");
+        }
+      } catch (error) {
+        // Fallback to popular subreddits on CORS/network error
+        const fallbackSuggestions = popularSubreddits
           .filter(
-            (sub: SubredditSuggestion) =>
+            (sub) =>
               (sub.name.toLowerCase().includes(query.toLowerCase()) ||
-                (sub.title &&
-                  sub.title.toLowerCase().includes(query.toLowerCase()))) &&
+                sub.title.toLowerCase().includes(query.toLowerCase())) &&
               !subreddits.includes(sub.name)
-          );
-        setSuggestions(subs);
-      } catch {
-        if (!ignore) setSuggestions([]);
+          )
+          .slice(0, 6)
+          .map((sub) => ({
+            name: sub.name,
+            title: sub.title,
+            icon: null,
+            subscribers: sub.subscribers,
+          }));
+
+        if (!ignore) setSuggestions(fallbackSuggestions);
+      } finally {
+        if (!ignore) setIsLoading(false);
       }
     };
     fetchSuggestions();
@@ -124,8 +229,8 @@ export default function SettingsScreen() {
     };
   }, [debouncedSubreddit, subreddits]);
 
-  // Limit to 5 subreddits
-  const addSubreddit = async (sub?: string) => {
+  // Enhanced function to handle adding subreddits with animation
+  const handleAddSubreddit = async (sub?: string) => {
     const rawInput = sub || newSubreddit;
     const subreddit = extractSubredditFromUrl(rawInput).trim();
 
@@ -134,18 +239,37 @@ export default function SettingsScreen() {
         alert("You can only add up to 5 subreddits.");
         return;
       }
-      const updated = [...subreddits, subreddit];
-      setSubreddits(updated); // SettingsContext will handle persistence
-      setNewSubreddit("");
-      setSuggestions([]);
-      setShowSuggestions(false);
-      setIsUrlDetected(false);
+
+      // Animate out the suggestions first
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: -10,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Then update the state
+        const updated = [...subreddits, subreddit];
+        setSubreddits(updated); // SettingsContext will handle persistence
+        setNewSubreddit("");
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setIsUrlDetected(false);
+      });
     } else if (subreddit && subreddits.includes(subreddit)) {
       alert(`r/${subreddit} is already in your list.`);
       setNewSubreddit("");
       setIsUrlDetected(false);
     }
   };
+
+  // Legacy function for backward compatibility
+  const addSubreddit = handleAddSubreddit;
 
   const removeSubreddit = async (sub: string) => {
     const updated = subreddits.filter((s) => s !== sub);
@@ -189,7 +313,12 @@ export default function SettingsScreen() {
         <View
           style={[
             styles.row,
-            { marginBottom: 8, position: "relative", zIndex: 101 },
+            {
+              marginBottom: 8,
+              position: "relative",
+              zIndex: 9999,
+              elevation: 30,
+            },
           ]}
         >
           <TextInput
@@ -233,15 +362,27 @@ export default function SettingsScreen() {
 
           {/* Suggestions dropdown */}
           {(showSuggestions || newSubreddit.length > 1) &&
-            suggestions.length > 0 && (
-              <View
+            (suggestions.length > 0 || isLoading) && (
+              <Animated.View
                 style={[
                   styles.suggestionDropdown,
                   {
-                    maxHeight: Math.min(suggestions.length * 60, 240), // Dynamic height based on content
-                    minHeight: 60,
+                    maxHeight: 400,
+                    minHeight: 80,
                     bottom: undefined,
                     top: 44,
+                    opacity: fadeAnim,
+                    transform: [{ translateY: slideAnim }],
+                    shadowColor: "#000",
+                    shadowOffset: {
+                      width: 0,
+                      height: 4,
+                    },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 6,
+                    elevation: 8,
+                    borderWidth: 1,
+                    borderColor: isDark ? "#333" : "#e0e0e0",
                   },
                 ]}
               >
@@ -252,63 +393,171 @@ export default function SettingsScreen() {
                     flexGrow: 1,
                   }}
                   keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={true}
+                  showsVerticalScrollIndicator={false}
                   scrollEnabled={true}
                   nestedScrollEnabled={true}
                   bounces={false}
                   overScrollMode="never"
                   removeClippedSubviews={false}
                 >
-                  {suggestions.map((sub: SubredditSuggestion) => (
-                    <TouchableOpacity
-                      key={sub.name}
-                      style={styles.suggestionItem}
-                      onPress={() => addSubreddit(sub.name)}
-                      activeOpacity={0.7}
+                  {isLoading ? (
+                    <View
+                      style={{
+                        padding: 20,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
                     >
-                      <View
+                      <ThemedText
                         style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
+                          color: isDark ? "#888" : "#666",
+                          fontSize: 14,
+                          fontStyle: "italic",
                         }}
                       >
-                        {sub.icon ? (
-                          <ExpoImage
-                            source={{ uri: sub.icon }}
+                        Searching...
+                      </ThemedText>
+                    </View>
+                  ) : suggestions.length > 0 ? (
+                    suggestions.map((sub: SubredditSuggestion, index) => (
+                      <TouchableOpacity
+                        key={sub.name}
+                        style={[
+                          styles.suggestionItem,
+                          {
+                            borderBottomWidth:
+                              index < suggestions.length - 1 ? 1 : 0,
+                            borderBottomColor: isDark ? "#333" : "#f0f0f0",
+                            paddingVertical: 16,
+                            paddingHorizontal: 16,
+                          },
+                        ]}
+                        onPress={() => handleAddSubreddit(sub.name)}
+                        activeOpacity={0.7}
+                      >
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <View
                             style={{
-                              width: 24,
-                              height: 24,
-                              borderRadius: 12,
-                              backgroundColor: "#222",
-                              marginRight: 6,
+                              flex: 1,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 12,
                             }}
-                            contentFit="cover"
-                          />
-                        ) : null}
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.suggestionText}>
-                            r/{sub.name}
-                          </ThemedText>
-                          {sub.title ? (
+                          >
+                            {sub.icon ? (
+                              <ExpoImage
+                                source={{ uri: sub.icon }}
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: 16,
+                                  backgroundColor: isDark ? "#333" : "#f0f0f0",
+                                }}
+                                contentFit="cover"
+                              />
+                            ) : (
+                              <View
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: 16,
+                                  backgroundColor: isDark ? "#333" : "#f0f0f0",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <ThemedText
+                                  style={{ fontSize: 14, fontWeight: "600" }}
+                                >
+                                  r/
+                                </ThemedText>
+                              </View>
+                            )}
+                            <View style={{ flex: 1 }}>
+                              <ThemedText
+                                style={[
+                                  styles.suggestionText,
+                                  {
+                                    fontSize: 16,
+                                    fontWeight: "600",
+                                    marginBottom: 2,
+                                  },
+                                ]}
+                              >
+                                r/{sub.name}
+                              </ThemedText>
+                              {sub.title ? (
+                                <ThemedText
+                                  style={{
+                                    color: isDark ? "#ccc" : "#666",
+                                    fontSize: 13,
+                                    marginBottom: 2,
+                                  }}
+                                  numberOfLines={1}
+                                >
+                                  {sub.title}
+                                </ThemedText>
+                              ) : null}
+                              {typeof sub.subscribers === "number" ? (
+                                <ThemedText
+                                  style={{
+                                    color: isDark ? "#888" : "#999",
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  {sub.subscribers.toLocaleString()} members
+                                </ThemedText>
+                              ) : null}
+                            </View>
+                          </View>
+                          <View
+                            style={{
+                              backgroundColor: isDark ? "#333" : "#f5f5f5",
+                              paddingHorizontal: 12,
+                              paddingVertical: 6,
+                              borderRadius: 20,
+                            }}
+                          >
                             <ThemedText
-                              style={{ color: "#aaa", fontSize: 12 }}
-                              numberOfLines={1}
+                              style={{
+                                color: isDark ? "#ccc" : "#666",
+                                fontSize: 12,
+                                fontWeight: "500",
+                              }}
                             >
-                              {sub.title}
+                              Add
                             </ThemedText>
-                          ) : null}
-                          {typeof sub.subscribers === "number" ? (
-                            <ThemedText style={{ color: "#888", fontSize: 11 }}>
-                              {sub.subscribers.toLocaleString()} subscribers
-                            </ThemedText>
-                          ) : null}
+                          </View>
                         </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View
+                      style={{
+                        padding: 20,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <ThemedText
+                        style={{
+                          color: isDark ? "#888" : "#666",
+                          fontSize: 14,
+                          fontStyle: "italic",
+                        }}
+                      >
+                        No subreddits found
+                      </ThemedText>
+                    </View>
+                  )}
                 </ScrollView>
-              </View>
+              </Animated.View>
             )}
         </View>
         <View style={styles.tagList}>
@@ -335,9 +584,6 @@ export default function SettingsScreen() {
         </View>
       </ThemedView>
 
-      {/* Debug panel to verify settings persistence */}
-      <SettingsDebugPanel />
-
       {/* Duration selection removed: now only available on the home page */}
     </ParallaxScrollView>
   );
@@ -361,6 +607,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#23272e", // dark background
     overflow: "visible", // Allow dropdown to overflow
+    position: "relative", // Ensure proper stacking context
   },
   sectionHeader: {
     marginBottom: 8,
@@ -456,22 +703,30 @@ const styles = StyleSheet.create({
   suggestionDropdown: {
     position: "absolute",
     top: 44,
-    left: 0,
-    right: 0,
-    backgroundColor: "#23272e", // dark dropdown
+    left: -12, // Extend beyond container edges
+    right: -12, // Extend beyond container edges
+    backgroundColor: "#000000", // completely opaque black background
     borderRadius: 8,
     // boxShadow for web compatibility, replaces shadow* props
-    boxShadow: "0px 4px 12px rgba(0,0,0,0.16)",
-    elevation: 20, // much higher z-index
-    zIndex: 1000, // Very high z-index to ensure it appears above everything
+    boxShadow: "0px 4px 12px rgba(0,0,0,0.8)",
+    elevation: 50, // Maximum elevation
+    zIndex: 99999, // Maximum possible z-index
     paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "#444",
+    paddingHorizontal: 12, // Add horizontal padding since we extended width
+    borderWidth: 3,
+    borderColor: "#666",
+    // Ensure complete opacity
+    opacity: 1,
+    // Add a solid backdrop effect
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
   },
   suggestionItem: {
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
-    minHeight: 60, // Ensure consistent item height
+    minHeight: 80, // Increased item height to match calculation
   },
   suggestionText: {
     color: "#fff",

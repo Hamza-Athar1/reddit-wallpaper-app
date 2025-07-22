@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Image as RNImage,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 import { loadFavorites } from "../../components/favorites-storage";
 import { ThemedText } from "../../components/ThemedText";
 import { ThemedView } from "../../components/ThemedView";
+import { useColorScheme } from "../../hooks/useColorScheme";
 import ImagePreviewModal from "../ImagePreviewModal";
 
 // Types must match main screen
@@ -33,9 +35,16 @@ export type Wallpaper = {
 import { useFocusEffect } from "@react-navigation/native";
 
 export default function FavoritesScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  
   const [favorites, setFavorites] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Animation states
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const scaleAnim = React.useRef(new Animated.Value(0.9)).current;
 
   // Reload favorites every time the tab is focused
   useFocusEffect(
@@ -43,32 +52,112 @@ export default function FavoritesScreen() {
       let isActive = true;
       (async () => {
         setLoading(true);
+        // Reset animations
+        fadeAnim.setValue(0);
+        scaleAnim.setValue(0.9);
+        
         const favs = await loadFavorites();
-        if (isActive) setFavorites(Array.isArray(favs) ? favs : []);
+        if (isActive) {
+          setFavorites(Array.isArray(favs) ? favs : []);
+          
+          // Animate in the content
+          Animated.parallel([
+            Animated.timing(fadeAnim, {
+              toValue: 1,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+            Animated.spring(scaleAnim, {
+              toValue: 1,
+              tension: 100,
+              friction: 8,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
         setLoading(false);
       })();
       return () => {
         isActive = false;
       };
-    }, [])
+    }, [fadeAnim, scaleAnim])
   );
 
   return (
     <ThemedView style={{ flex: 1, paddingTop: 32 }}>
-      <ThemedText type="title" style={{ margin: 16 }}>
-        Favorites
+      <ThemedText type="title" style={{ 
+        margin: 16,
+        color: isDark ? "#fff" : "#000"
+      }}>
+        ❤️ Favorites
       </ThemedText>
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" />
+        <View style={[styles.centered, { paddingVertical: 40 }]}>
+          <ActivityIndicator size="large" color="#0a7ea4" />
+          <ThemedText style={{ 
+            marginTop: 16, 
+            color: isDark ? "#ccc" : "#666",
+            fontSize: 16 
+          }}>
+            Loading favorites...
+          </ThemedText>
         </View>
       ) : favorites.length === 0 ? (
-        <View style={styles.centered}>
-          <ThemedText>No favorites yet.</ThemedText>
-        </View>
+        <Animated.View style={[
+          styles.centered, 
+          { 
+            paddingVertical: 40,
+            paddingHorizontal: 20,
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}>
+          <View style={{
+            backgroundColor: isDark ? "#2a2a2a" : "#f5f5f5",
+            borderRadius: 16,
+            padding: 32,
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: isDark ? "#444" : "#e0e0e0",
+            shadowColor: isDark ? "#000" : "#333",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            elevation: 4,
+          }}>
+            <ThemedText style={{ 
+              fontSize: 64, 
+              marginBottom: 16 
+            }}>
+              💔
+            </ThemedText>
+            <ThemedText style={{
+              fontSize: 20,
+              fontWeight: "600",
+              marginBottom: 8,
+              color: isDark ? "#fff" : "#333",
+              textAlign: "center"
+            }}>
+              No favorites yet
+            </ThemedText>
+            <ThemedText style={{
+              fontSize: 16,
+              color: isDark ? "#ccc" : "#666",
+              textAlign: "center",
+              lineHeight: 22
+            }}>
+              Start exploring wallpapers and tap the heart icon to save your favorites here!
+            </ThemedText>
+          </View>
+        </Animated.View>
       ) : (
-        <FlatList
-          data={favorites}
+        <Animated.View style={{
+          flex: 1,
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }]
+        }}>
+          <FlatList
+            data={favorites}
           keyExtractor={(item) => item.id}
           numColumns={2}
           contentContainerStyle={{ gap: 14, padding: 14 }}
@@ -161,6 +250,7 @@ export default function FavoritesScreen() {
             </View>
           )}
         />
+        </Animated.View>
       )}
       <ImagePreviewModal
         url={previewUrl}
