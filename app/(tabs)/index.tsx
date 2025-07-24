@@ -46,23 +46,20 @@ const IMAGE_MARGIN = 14; // Increased gap
 const IMAGE_HEIGHT_RATIO = 1; // Taller aspect ratio to show full wallpapers
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
-// Post order options for filtering - simplified for app consistency
+// Post order options for filtering - only hot posts
 const POST_ORDER_OPTIONS = [
   { label: "🔥 Hot", value: "hot", description: "Trending" },
-  { label: "⭐ Top", value: "top", description: "Best" },
-  { label: "🆕 New", value: "new", description: "Latest" },
-  { label: "📈 Rising", value: "rising", description: "Popular" },
 ];
 
 export default function HomeScreen() {
   const window = useWindowDimensions();
   const { subreddits, filterByResolution } = useSettings();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  
+  const isDark = colorScheme === "dark";
+
   // Always use 'all' as the duration
   const duration = "all";
-  const [postOrder, setPostOrder] = useState<string>("top"); // Default to top posts
+  const [postOrder, setPostOrder] = useState<string>("hot"); // Only hot posts available
   const [images, setImages] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
@@ -97,8 +94,8 @@ export default function HomeScreen() {
     return { numColumns: cols, IMAGE_WIDTH: width, isSmallScreen: small };
   }, [window.width]);
   /**
-   * Fetch wallpapers from multiple time ranges for unlimited variety.
-   * This fetches from all available time periods to give users maximum wallpapers.
+   * Fetch wallpapers from multiple subreddits without time restrictions.
+   * This fetches all available wallpapers to give users maximum content.
    */
   const fetchAll = async (reset = false) => {
     setLoading(true);
@@ -120,24 +117,19 @@ export default function HomeScreen() {
         postOrder
       );
 
-      // Start with "week" time range for reliable fetching, then expand
-      const timeRanges = ["week"];
-
       const fetchResult = await (fetchExtendedWallpapers as any)({
         subreddits: srList,
-        timeRanges,
-        postType: postOrder, // Use selected post order instead of hardcoded "top"
-        limit: 50, // Start with reasonable limit for testing
+        timeRanges: ["all"], // Only use "all" time range for hot posts
+        postType: postOrder, // Will always be "hot"
+        limit: 100, // Max limit per subreddit for comprehensive fetching
         after: reset ? {} : afterMap,
       });
 
       const { images: fetchedImages, after: newAfterMap } = fetchResult;
 
-      console.log("Fetched images count:", fetchedImages?.length || 0);
-      console.log("After map:", newAfterMap);
-
       if (reset) {
         setImages(Array.isArray(fetchedImages) ? fetchedImages : []);
+        setAfterMap(newAfterMap || {}); // Ensure we set the afterMap for pagination
       } else {
         setImages((prev: Wallpaper[]) => {
           const ids = new Set(prev.map((i: Wallpaper) => i.id));
@@ -147,17 +139,7 @@ export default function HomeScreen() {
           console.log("Adding", newUniqueImages.length, "new unique images");
           return [...prev, ...newUniqueImages];
         });
-      }
-      setAfterMap(newAfterMap);
-
-      // If we got fewer than expected images, try expanding time ranges for unlimited content
-      if (reset && fetchedImages.length < 20) {
-        console.log(
-          "Got few images, attempting to fetch from more time ranges..."
-        );
-        setTimeout(() => {
-          fetchMoreTimeRanges();
-        }, 1000);
+        setAfterMap(newAfterMap || {});
       }
     } catch (e: any) {
       console.error("Error fetching wallpapers:", e);
@@ -169,8 +151,8 @@ export default function HomeScreen() {
           subreddits?.length > 0 ? subreddits : ["wallpapers", "earthporn"];
         const fallbackImages: Wallpaper[] = [];
 
-        for (const subreddit of srList.slice(0, 3)) {
-          // Limit to 3 subreddits for fallback
+        for (const subreddit of srList.slice(0, 5)) {
+          // Increased from 3 to 5 subreddits for more variety
           const images = await simpleFetch(subreddit, postOrder);
           fallbackImages.push(...images);
         }
@@ -227,23 +209,20 @@ export default function HomeScreen() {
           ? loaded.subreddits
           : subreddits || ["wallpapers"];
 
-      // Start with "week" time range for reliable fetching, then expand
-      const timeRanges = ["week"];
-
       const { images: newImages, after: newAfterMap } = await (
         fetchExtendedWallpapers as any
       )({
         subreddits: srList,
-        timeRanges,
-        postType: postOrder, // Use selected post order
-        limit: 50, // Start with reasonable limit for testing
+        timeRanges: ["all"], // Only use "all" time range for hot posts
+        postType: postOrder, // Will always be "hot"
+        limit: 100, // Max limit per subreddit for comprehensive fetching
         after: afterMap,
       });
       setImages((prev: Wallpaper[]) => {
         const ids = new Set(prev.map((i: Wallpaper) => i.id));
         return [...prev, ...newImages.filter((i: Wallpaper) => !ids.has(i.id))];
       });
-      setAfterMap(newAfterMap);
+      setAfterMap(newAfterMap || {}); // Ensure we handle null afterMap
     } catch (e) {
       console.error("Error loading more wallpapers:", e);
       // Optionally show error
@@ -252,61 +231,53 @@ export default function HomeScreen() {
     }
   };
 
-  // Function to fetch from additional time ranges for unlimited content
-  const fetchMoreTimeRanges = async () => {
+  /**
+   * Fallback load more function when no pagination tokens are available.
+   * Tries different strategies to get more content from hot posts.
+   */
+  const loadMoreFallback = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
     try {
-      console.log(
-        "Fetching from additional time ranges for unlimited content..."
-      );
+      console.log("Using fallback load more strategy for hot posts...");
       const settings = await import("../../components/settings-storage");
       const loaded = await settings.loadSettings();
       const srList =
         Array.isArray(loaded.subreddits) && loaded.subreddits.length > 0
           ? loaded.subreddits
-          : subreddits?.length > 0
-          ? subreddits
-          : ["wallpapers", "earthporn", "natureporn"];
+          : subreddits || ["wallpapers"];
 
-      // Fetch from additional time ranges for unlimited variety
-      const additionalTimeRanges = ["day", "month", "year", "all"];
-
-      const fetchResult = await (fetchExtendedWallpapers as any)({
+      // Strategy: Try to fetch from more subreddits or with different limits
+      const { images: newImages } = await (fetchExtendedWallpapers as any)({
         subreddits: srList,
-        timeRanges: additionalTimeRanges,
-        postType: postOrder,
-        limit: 75, // Higher limit for additional content
-        after: {}, // Start fresh for additional time ranges
+        timeRanges: ["all"],
+        postType: "hot",
+        limit: 50,
+        after: {},
       });
 
-      const { images: additionalImages } = fetchResult;
-      console.log(
-        "Additional time ranges fetched:",
-        additionalImages?.length || 0,
-        "images"
-      );
-
-      if (additionalImages?.length > 0) {
+      if (newImages?.length > 0) {
         setImages((prev: Wallpaper[]) => {
           const ids = new Set(prev.map((i: Wallpaper) => i.id));
-          const newUniqueImages = additionalImages.filter(
+          const uniqueImages = newImages.filter(
             (i: Wallpaper) => !ids.has(i.id)
           );
-          console.log(
-            "Adding",
-            newUniqueImages.length,
-            "additional unique images"
-          );
-          return [...prev, ...newUniqueImages];
+          console.log(`Fallback: Adding ${uniqueImages.length} new hot images`);
+          return [...prev, ...uniqueImages];
         });
       }
-    } catch (error) {
-      console.error("Error fetching additional time ranges:", error);
+    } catch (e) {
+      console.error("Error in fallback load more:", e);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
   // Memoized handler functions
   const handlePostOrderChange = useCallback((newOrder: string) => {
     setPostOrder(newOrder);
+    // Reset afterMap when changing post order to start fresh pagination
+    setAfterMap({});
     // Show loading state when changing filter
     setLoading(true);
   }, []);
@@ -453,130 +424,139 @@ export default function HomeScreen() {
             <ThemedView style={styles.titleContainer}>
               <ThemedText type="title">Reddit Wallpapers</ThemedText>
               <ThemedText style={styles.subtitle}>
-                Unlimited collection from all time periods
+                Hot wallpapers from multiple subreddits
               </ThemedText>
             </ThemedView>
 
-            {/* Enhanced Post Order Filter - Optimized for Small Screens */}
-            <ThemedView
-              style={[
-                styles.filterContainer,
-                isSmallScreen && styles.filterContainerSmall,
-              ]}
-            >
-              <View style={styles.filterHeader}>
-                <View style={styles.filterTitleSection}>
-                  <ThemedText
-                    style={[
-                      styles.filterLabel,
-                      isSmallScreen && styles.filterLabelSmall,
-                    ]}
-                  >
-                    Sort by
-                  </ThemedText>
-                  {!loading && images.length > 0 && (
-                    <ThemedText style={styles.filterSubtitle}>
-                      {filteredImages.length} wallpapers from all time periods
+            {/* Filter section hidden since only Hot posts are available */}
+            {false && (
+              <ThemedView
+                style={[
+                  styles.filterContainer,
+                  isSmallScreen && styles.filterContainerSmall,
+                ]}
+              >
+                <View style={styles.filterHeader}>
+                  <View style={styles.filterTitleSection}>
+                    <ThemedText
+                      style={[
+                        styles.filterLabel,
+                        isSmallScreen && styles.filterLabelSmall,
+                      ]}
+                    >
+                      Sort by
                     </ThemedText>
+                    {!loading && images.length > 0 && (
+                      <ThemedText style={styles.filterSubtitle}>
+                        {filteredImages.length} wallpapers from{" "}
+                        {subreddits?.length || "multiple"} subreddits
+                      </ThemedText>
+                    )}
+                  </View>
+                  {loading && (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color="#0a7ea4" />
+                    </View>
                   )}
                 </View>
-                {loading && (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#0a7ea4" />
-                  </View>
-                )}
-              </View>
-              <View style={styles.filterRow}>
-                {POST_ORDER_OPTIONS.map((option, index) => {
-                  const isActive = postOrder === option.value;
+                <View style={styles.filterRow}>
+                  {POST_ORDER_OPTIONS.map((option, index) => {
+                    const isActive = postOrder === option.value;
 
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[
-                        styles.filterPill,
-                        isSmallScreen && styles.filterPillSmall,
-                        isActive && styles.filterPillActive,
-                        loading && styles.filterPillDisabled,
-                        { 
-                          flex: 1, 
-                          marginHorizontal: isSmallScreen ? 1 : 2,
-                          shadowColor: isDark ? "#000" : "#333",
-                          shadowOffset: {
-                            width: 0,
-                            height: isActive ? 4 : 2,
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.filterPill,
+                          isSmallScreen && styles.filterPillSmall,
+                          isActive && styles.filterPillActive,
+                          loading && styles.filterPillDisabled,
+                          {
+                            flex: 1,
+                            marginHorizontal: isSmallScreen ? 1 : 2,
+                            shadowColor: isDark ? "#000" : "#333",
+                            shadowOffset: {
+                              width: 0,
+                              height: isActive ? 4 : 2,
+                            },
+                            shadowOpacity: isActive ? 0.3 : 0.1,
+                            shadowRadius: isActive ? 6 : 3,
+                            elevation: isActive ? 6 : 2,
                           },
-                          shadowOpacity: isActive ? 0.3 : 0.1,
-                          shadowRadius: isActive ? 6 : 3,
-                          elevation: isActive ? 6 : 2,
-                        },
-                      ]}
-                      onPress={() => handlePostOrderChange(option.value)}
-                      accessibilityLabel={`Sort by ${option.label} - ${option.description}`}
-                      disabled={loading}
-                      activeOpacity={0.8}
-                    >
-                      <View style={styles.filterPillContent}>
-                        <ThemedText
-                          style={[
-                            styles.filterPillText,
-                            isSmallScreen && styles.filterPillTextSmall,
-                            isActive && styles.filterPillTextActive,
-                          ]}
-                        >
-                          {isSmallScreen
-                            ? option.label.split(" ")[0]
-                            : option.label}
-                        </ThemedText>
-                        {isActive && (
-                          <View
-                            style={{
-                              position: 'absolute',
-                              bottom: -2,
-                              left: '50%',
-                              transform: [{ translateX: -6 }],
-                              width: 12,
-                              height: 3,
-                              backgroundColor: '#0a7ea4',
-                              borderRadius: 2,
-                            }}
-                          />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ThemedView>
+                        ]}
+                        onPress={() => handlePostOrderChange(option.value)}
+                        accessibilityLabel={`Sort by ${option.label} - ${option.description}`}
+                        disabled={loading}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.filterPillContent}>
+                          <ThemedText
+                            style={[
+                              styles.filterPillText,
+                              isSmallScreen && styles.filterPillTextSmall,
+                              isActive && styles.filterPillTextActive,
+                            ]}
+                          >
+                            {isSmallScreen
+                              ? option.label.split(" ")[0]
+                              : option.label}
+                          </ThemedText>
+                          {isActive && (
+                            <View
+                              style={{
+                                position: "absolute",
+                                bottom: -2,
+                                left: "50%",
+                                transform: [{ translateX: -6 }],
+                                width: 12,
+                                height: 3,
+                                backgroundColor: "#0a7ea4",
+                                borderRadius: 2,
+                              }}
+                            />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ThemedView>
+            )}
             {loading && (
               <View style={[styles.centered, { paddingVertical: 40 }]}>
                 <ActivityIndicator size="large" color="#0a7ea4" />
-                <ThemedText style={{ 
-                  marginTop: 16, 
-                  color: isDark ? "#ccc" : "#666",
-                  fontSize: 16 
-                }}>
+                <ThemedText
+                  style={{
+                    marginTop: 16,
+                    color: isDark ? "#ccc" : "#666",
+                    fontSize: 16,
+                  }}
+                >
                   Loading wallpapers...
                 </ThemedText>
               </View>
             )}
             {error && (
-              <Animated.View style={[
-                styles.centered, 
-                { 
-                  paddingVertical: 40,
-                  paddingHorizontal: 20,
-                  opacity: fadeAnim 
-                }
-              ]}>
-                <View style={{
-                  backgroundColor: isDark ? "#ff4444" : "#ffebee",
-                  borderRadius: 12,
-                  padding: 20,
-                  alignItems: 'center',
-                  borderWidth: 1,
-                  borderColor: isDark ? "#ff6666" : "#ffcdd2",
-                }}>
+              <Animated.View
+                style={[
+                  styles.centered,
+                  {
+                    paddingVertical: 40,
+                    paddingHorizontal: 20,
+                    opacity: fadeAnim,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    backgroundColor: isDark ? "#ff4444" : "#ffebee",
+                    borderRadius: 12,
+                    padding: 20,
+                    alignItems: "center",
+                    borderWidth: 1,
+                    borderColor: isDark ? "#ff6666" : "#ffcdd2",
+                  }}
+                >
                   <ThemedText
                     style={{
                       color: isDark ? "#fff" : "#c62828",
@@ -613,11 +593,13 @@ export default function HomeScreen() {
                     }}
                     activeOpacity={0.8}
                   >
-                    <ThemedText style={{ 
-                      color: "white", 
-                      fontWeight: "600",
-                      fontSize: 16 
-                    }}>
+                    <ThemedText
+                      style={{
+                        color: "white",
+                        fontWeight: "600",
+                        fontSize: 16,
+                      }}
+                    >
                       🔄 Try Again
                     </ThemedText>
                   </TouchableOpacity>
@@ -625,49 +607,56 @@ export default function HomeScreen() {
               </Animated.View>
             )}
             {!loading && !error && images.length === 0 && (
-              <Animated.View style={[
-                styles.centered, 
-                { 
-                  paddingVertical: 40,
-                  paddingHorizontal: 20,
-                  opacity: fadeAnim 
-                }
-              ]}>
-                <View style={{
-                  backgroundColor: isDark ? "#2a2a2a" : "#f5f5f5",
-                  borderRadius: 12,
-                  padding: 24,
-                  alignItems: 'center',
-                  borderWidth: 1,
-                  borderColor: isDark ? "#444" : "#e0e0e0",
-                }}>
-                  <ThemedText style={{ 
-                    fontSize: 48, 
-                    marginBottom: 16 
-                  }}>
+              <Animated.View
+                style={[
+                  styles.centered,
+                  {
+                    paddingVertical: 40,
+                    paddingHorizontal: 20,
+                    opacity: fadeAnim,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    backgroundColor: isDark ? "#2a2a2a" : "#f5f5f5",
+                    borderRadius: 12,
+                    padding: 24,
+                    alignItems: "center",
+                    borderWidth: 1,
+                    borderColor: isDark ? "#444" : "#e0e0e0",
+                  }}
+                >
+                  <ThemedText
+                    style={{
+                      fontSize: 48,
+                      marginBottom: 16,
+                    }}
+                  >
                     🔍
                   </ThemedText>
                   <ThemedText
-                    style={{ 
-                      textAlign: "center", 
+                    style={{
+                      textAlign: "center",
                       fontSize: 18,
                       fontWeight: "600",
                       marginBottom: 8,
-                      color: isDark ? "#fff" : "#333"
+                      color: isDark ? "#fff" : "#333",
                     }}
                   >
                     No wallpapers found
                   </ThemedText>
                   <ThemedText
-                    style={{ 
-                      textAlign: "center", 
+                    style={{
+                      textAlign: "center",
                       fontSize: 14,
                       color: isDark ? "#ccc" : "#666",
                       marginBottom: 20,
-                      lineHeight: 20
+                      lineHeight: 20,
                     }}
                   >
-                    Check your internet connection or try different subreddits in settings.
+                    Check your internet connection or try different subreddits
+                    in settings.
                   </ThemedText>
                   <TouchableOpacity
                     onPress={() => fetchAll(true)}
@@ -684,11 +673,13 @@ export default function HomeScreen() {
                     }}
                     activeOpacity={0.8}
                   >
-                    <ThemedText style={{ 
-                      color: "white", 
-                      fontWeight: "600",
-                      fontSize: 16 
-                    }}>
+                    <ThemedText
+                      style={{
+                        color: "white",
+                        fontWeight: "600",
+                        fontSize: 16,
+                      }}
+                    >
                       🔄 Try Again
                     </ThemedText>
                   </TouchableOpacity>
@@ -700,27 +691,49 @@ export default function HomeScreen() {
         ListFooterComponent={
           <View style={{ alignItems: "center", marginVertical: 16 }}>
             {loadingMore && <ActivityIndicator style={{ margin: 16 }} />}
-            {Object.values(afterMap).some((v) => v != null) && !loadingMore && (
-              <TouchableOpacity
-                onPress={loadMore}
-                style={{
-                  backgroundColor: "#0a7ea4",
-                  borderRadius: 8,
-                  paddingHorizontal: 24,
-                  paddingVertical: 12,
-                  marginTop: 8,
-                  opacity: loadingMore ? 0.6 : 1,
-                }}
-                disabled={loadingMore}
-                accessibilityLabel="Load more wallpapers"
+            {/* Debug info for afterMap */}
+            {__DEV__ && (
+              <ThemedText
+                style={{ fontSize: 10, color: "#666", marginBottom: 8 }}
               >
-                <ThemedText
-                  style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
-                >
-                  {loadingMore ? "Loading..." : "Load More Wallpapers"}
-                </ThemedText>
-              </TouchableOpacity>
+                Debug: {JSON.stringify(afterMap)} | Has after tokens:{" "}
+                {Object.values(afterMap)
+                  .some((v) => v != null)
+                  .toString()}
+              </ThemedText>
             )}
+            {/* Show Load More button if we have pagination tokens OR if we have images (fallback) */}
+            {(Object.values(afterMap).some((v) => v != null) ||
+              (images.length >= 10 && !loading)) &&
+              !loadingMore && (
+                <TouchableOpacity
+                  onPress={
+                    Object.values(afterMap).some((v) => v != null)
+                      ? loadMore
+                      : loadMoreFallback
+                  }
+                  style={{
+                    backgroundColor: "#0a7ea4",
+                    borderRadius: 8,
+                    paddingHorizontal: 24,
+                    paddingVertical: 12,
+                    marginTop: 8,
+                    opacity: loadingMore ? 0.6 : 1,
+                  }}
+                  disabled={loadingMore}
+                  accessibilityLabel="Load more wallpapers"
+                >
+                  <ThemedText
+                    style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
+                  >
+                    {loadingMore
+                      ? "Loading..."
+                      : Object.values(afterMap).some((v) => v != null)
+                      ? "Load More Wallpapers"
+                      : "Try More Content"}
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
           </View>
         }
         ListEmptyComponent={null}
@@ -912,10 +925,11 @@ const styles = StyleSheet.create({
   },
 });
 
-// Simple fallback fetch function in case the main fetch fails
-const simpleFetch = async (subreddit: string, postType: string = "top") => {
+// Fallback fetch function for hot posts only
+const simpleFetch = async (subreddit: string, postType: string = "hot") => {
   try {
-    const url = `https://www.reddit.com/r/${subreddit}/${postType}.json?limit=25&t=week&raw_json=1`;
+    // Only fetch hot posts
+    const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=100&raw_json=1`;
     console.log("Fallback fetch from:", url);
 
     const response = await fetch(url, {
@@ -934,7 +948,7 @@ const simpleFetch = async (subreddit: string, postType: string = "top") => {
       return [];
     }
 
-    return data.data.children
+    const images = data.data.children
       .map((c: any) => c.data)
       .filter((p: any) => {
         return (
@@ -956,16 +970,20 @@ const simpleFetch = async (subreddit: string, postType: string = "top") => {
             p.preview.images[0].resolutions?.[0]?.url?.replace(/&amp;/g, "&") ||
             null,
           subreddit,
-          time: "week",
-          postType,
+          postType: "hot",
           created_utc: p.created_utc,
           score: p.score || 0,
           author: p.author,
           permalink: p.permalink,
         };
       });
+
+    console.log(
+      `Fallback fetch successful from ${subreddit} (hot): ${images.length} images`
+    );
+    return images;
   } catch (error) {
-    console.error("Simple fetch failed for", subreddit, error);
+    console.error(`Simple fetch failed for ${subreddit} (hot):`, error);
     return [];
   }
 };

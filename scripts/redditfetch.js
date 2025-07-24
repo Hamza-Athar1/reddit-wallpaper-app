@@ -81,6 +81,8 @@ async function fetchExtendedWallpapers({
 
         const json = await res.json();
         
+        console.log(`Response for r/${subreddit} (${time}): ${json.data?.children?.length || 0} posts, after token: ${json.data?.after || 'null'}`);
+        
         if (!json.data || !Array.isArray(json.data.children)) {
           const result = { images: [], after: null };
           return { key, ...result };
@@ -192,6 +194,8 @@ async function fetchExtendedWallpapers({
               num_comments: p.num_comments || 0
             };
           });
+
+        console.log(`Filtered result for r/${subreddit} (${time}): ${images.length} images passed filtering, after: ${json.data.after || 'null'}`);
 
         const result = { images, after: json.data.after || null };
         
