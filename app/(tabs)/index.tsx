@@ -939,17 +939,16 @@ const simpleFetch = async (subreddit: string, postType: string = "hot") => {
       .map((p: any) => {
         const source = p.preview.images[0].source;
 
-        // Get optimized preview for faster loading
+        // Get optimized preview for faster loading but better quality
         let previewUrl = null;
         if (p.preview.images[0].resolutions?.length > 0) {
           const previews = p.preview.images[0].resolutions;
-          // Find an optimal preview size for mobile (200-400px width for faster loading)
-          const mobilePreview =
-            previews.find((r: any) => r.width >= 200 && r.width <= 400) ||
+          // Find a good preview resolution (aim for 300-600px width for better quality)
+          const goodPreview =
             previews.find((r: any) => r.width >= 300 && r.width <= 600) ||
-            previews[Math.floor(previews.length / 3)] || // Use smaller preview by default
-            previews[0];
-          previewUrl = mobilePreview.url?.replace(/&amp;/g, "&");
+            previews.find((r: any) => r.width >= 200 && r.width <= 800) ||
+            previews[previews.length - 1]; // fallback to largest available
+          previewUrl = goodPreview.url?.replace(/&amp;/g, "&");
         }
 
         return {

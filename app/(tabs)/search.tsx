@@ -80,19 +80,51 @@ const performSearch = async (
             url.includes(".jpeg"))
         );
       })
-      .map((post: any) => ({
-        id: post.data.id,
-        title: post.data.title,
-        url: post.data.url,
-        width: post.data.preview?.images?.[0]?.source?.width || 1920,
-        height: post.data.preview?.images?.[0]?.source?.height || 1080,
-        preview: post.data.thumbnail !== "self" ? post.data.thumbnail : null,
-        subreddit: post.data.subreddit,
-        score: post.data.score,
-        created_utc: post.data.created_utc,
-        author: post.data.author,
-        permalink: post.data.permalink,
-      }))
+      .map((post: any) => {
+        // Get better preview resolution from Reddit's preview images
+        let previewUrl = null;
+        if (post.data.preview?.images?.[0]?.resolutions) {
+          const resolutions = post.data.preview.images[0].resolutions;
+          // Find a good preview resolution (aim for 300-600px width)
+          const goodPreview =
+            resolutions.find(
+              (res: any) => res.width >= 300 && res.width <= 600
+            ) ||
+            resolutions.find(
+              (res: any) => res.width >= 200 && res.width <= 800
+            ) ||
+            resolutions[resolutions.length - 1]; // fallback to largest available
+
+          if (goodPreview) {
+            previewUrl = goodPreview.url?.replace(/&amp;/g, "&");
+          }
+        }
+
+        // Fallback to thumbnail if no good preview found, but avoid very small thumbnails
+        if (
+          !previewUrl &&
+          post.data.thumbnail &&
+          post.data.thumbnail !== "self" &&
+          post.data.thumbnail !== "default" &&
+          !post.data.thumbnail.includes("140")
+        ) {
+          previewUrl = post.data.thumbnail;
+        }
+
+        return {
+          id: post.data.id,
+          title: post.data.title,
+          url: post.data.url,
+          width: post.data.preview?.images?.[0]?.source?.width || 1920,
+          height: post.data.preview?.images?.[0]?.source?.height || 1080,
+          preview: previewUrl,
+          subreddit: post.data.subreddit,
+          score: post.data.score,
+          created_utc: post.data.created_utc,
+          author: post.data.author,
+          permalink: post.data.permalink,
+        };
+      })
       .filter((wallpaper: Wallpaper) => {
         // Apply dimension filters
         if (filters.minWidth && wallpaper.width < filters.minWidth)
