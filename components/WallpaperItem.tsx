@@ -1,11 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { Image } from "expo-image";
 import React, { useCallback, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Image as RNImage,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, TouchableOpacity, View } from "react-native";
 import { ThemedText } from "./ThemedText";
 
 type Wallpaper = {
@@ -103,8 +99,8 @@ export const WallpaperItem = React.memo(function WallpaperItem({
         onPress={handleImagePress}
       >
         <View style={{ position: "relative" }}>
-          <RNImage
-            source={{ uri: item.url }}
+          <Image
+            source={{ uri: item.preview || item.url }} // Use preview for faster loading, fallback to full URL
             style={{
               width: IMAGE_WIDTH,
               height: imageHeight, // Use dynamic height instead of fixed ratio
@@ -112,8 +108,11 @@ export const WallpaperItem = React.memo(function WallpaperItem({
               backgroundColor: imgLoading ? "#000" : "#111",
             }}
             onLoadStart={() => setImgLoading(true)}
-            onLoadEnd={() => setImgLoading(false)}
-            resizeMode="contain" // Changed from "cover" to "contain" to show full image
+            onLoad={() => setImgLoading(false)}
+            contentFit="contain" // Expo Image equivalent of resizeMode="contain"
+            cachePolicy="memory-disk" // Enable aggressive caching for faster loading
+            priority="high" // High priority for visible images
+            transition={200} // Smooth fade-in transition
           />
           {imgLoading && (
             <View

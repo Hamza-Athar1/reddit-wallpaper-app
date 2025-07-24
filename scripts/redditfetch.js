@@ -146,14 +146,15 @@ async function fetchExtendedWallpapers({
                 imageUrl = source.url.replace(/&amp;/g, "&");
               }
               
-              // Get a smaller preview image for thumbnails
+              // Get a smaller preview image for faster loading
               if (p.preview.images[0].resolutions?.length > 0) {
                 const previews = p.preview.images[0].resolutions;
-                // Find a good preview size (around 300-600px width)
-                const goodPreview = previews.find(r => r.width >= 300 && r.width <= 600) || 
-                                   previews[Math.floor(previews.length / 2)] || 
-                                   previews[0];
-                previewUrl = goodPreview.url?.replace(/&amp;/g, "&");
+                // Find an optimal preview size for mobile (200-400px width for faster loading)
+                const mobilePreview = previews.find(r => r.width >= 200 && r.width <= 400) || 
+                                     previews.find(r => r.width >= 300 && r.width <= 600) ||
+                                     previews[Math.floor(previews.length / 3)] || // Use smaller preview by default
+                                     previews[0];
+                previewUrl = mobilePreview.url?.replace(/&amp;/g, "&");
               }
             }
             

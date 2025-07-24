@@ -938,15 +938,27 @@ const simpleFetch = async (subreddit: string, postType: string = "hot") => {
       })
       .map((p: any) => {
         const source = p.preview.images[0].source;
+
+        // Get optimized preview for faster loading
+        let previewUrl = null;
+        if (p.preview.images[0].resolutions?.length > 0) {
+          const previews = p.preview.images[0].resolutions;
+          // Find an optimal preview size for mobile (200-400px width for faster loading)
+          const mobilePreview =
+            previews.find((r: any) => r.width >= 200 && r.width <= 400) ||
+            previews.find((r: any) => r.width >= 300 && r.width <= 600) ||
+            previews[Math.floor(previews.length / 3)] || // Use smaller preview by default
+            previews[0];
+          previewUrl = mobilePreview.url?.replace(/&amp;/g, "&");
+        }
+
         return {
           id: p.id,
           title: p.title?.trim() || "Untitled",
-          url: p.url.replace(/&amp;/g, "&"),
+          url: p.url.replace(/&amp;/g, "&"), // Full quality for downloads
           width: source.width,
           height: source.height,
-          preview:
-            p.preview.images[0].resolutions?.[0]?.url?.replace(/&amp;/g, "&") ||
-            null,
+          preview: previewUrl, // Optimized preview for display
           subreddit,
           postType: "hot",
           created_utc: p.created_utc,
