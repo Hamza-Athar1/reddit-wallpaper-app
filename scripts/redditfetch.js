@@ -20,7 +20,7 @@ async function fetchExtendedWallpapers({
   subreddits = [],
   timeRanges = ["week"],
   postType = "top",
-  limit = 50,
+  limit = 75, // Increased default limit for mobile
   after = {},
 } = {}) {
   console.log("fetchExtendedWallpapers called with:", { subreddits, timeRanges, postType, limit });
@@ -86,31 +86,101 @@ async function fetchExtendedWallpapers({
           return { key, ...result };
         }
 
-        // Optimized filtering with early returns
+        // Optimized filtering with early returns - more permissive for mobile
         const images = json.data.children
           .map(c => c.data)
           .filter(p => {
-            // Early return optimizations
-            if (!p.post_hint || p.post_hint !== "image") return false;
-            if (!p.preview?.images?.[0]?.source?.url) return false;
+            // Allow both direct image posts and gallery posts
+            if (p.post_hint === "image") return true;
+            if (p.post_hint === "hosted:video") return false; // Skip videos
+            if (p.post_hint === "rich:video") return false; // Skip videos
+            
+            // Check for direct image URLs even without post_hint
+            if (p.url && /\.(jpe?g|png|webp)$/i.test(p.url)) return true;
+            
+            // Check for gallery posts with preview images
+            if (p.is_gallery && p.preview?.images?.[0]?.source?.url) return true;
+            if (p.media_metadata && p.preview?.images?.[0]?.source?.url) return true;
+            
+            // Check for preview images (Reddit's own image hosting)
+            if (p.preview?.images?.[0]?.source?.url) {
+              // Allow i.redd.it and other Reddit image hosts
+              if (p.url.includes('i.redd.it') || p.url.includes('i.imgur.com') || p.url.includes('imgur.com')) return true;
+            }
+            
+            return false;
+          })
+          .filter(p => {
+            // Second pass: quality and content filtering
             if (p.over_18) return false; // Filter NSFW content
             if (p.url.includes("gif") || p.url.includes("gifv")) return false;
-            if (!/\.(jpe?g|png|webp)$/i.test(p.url)) return false;
             
-            const source = p.preview.images[0].source;
-            if (source.width < 150 || source.height < 150) return false;
+            // Get image dimensions - be more flexible with size requirements
+            let width = 0, height = 0;
+            if (p.preview?.images?.[0]?.source) {
+              width = p.preview.images[0].source.width;
+              height = p.preview.images[0].source.height;
+            }
+            
+            // More permissive size requirements for mobile - allow smaller images
+            if (width > 0 && height > 0 && (width < 100 || height < 100)) return false;
             
             return true;
           })
           .map(p => {
-            const source = p.preview.images[0].source;
+            // Get the best available image URL and metadata
+            let imageUrl = p.url;
+            let width = 0, height = 0;
+            let previewUrl = null;
+            
+            // Handle Reddit-hosted images
+            if (p.preview?.images?.[0]?.source) {
+              const source = p.preview.images[0].source;
+              width = source.width;
+              height = source.height;
+              
+              // Use the highest quality preview if available
+              if (source.url) {
+                imageUrl = source.url.replace(/&amp;/g, "&");
+              }
+              
+              // Get a smaller preview image for thumbnails
+              if (p.preview.images[0].resolutions?.length > 0) {
+                const previews = p.preview.images[0].resolutions;
+                // Find a good preview size (around 300-600px width)
+                const goodPreview = previews.find(r => r.width >= 300 && r.width <= 600) || 
+                                   previews[Math.floor(previews.length / 2)] || 
+                                   previews[0];
+                previewUrl = goodPreview.url?.replace(/&amp;/g, "&");
+              }
+            }
+            
+            // Handle gallery posts - get first image
+            if (p.is_gallery && p.media_metadata) {
+              const firstMediaId = Object.keys(p.media_metadata)[0];
+              const firstMedia = p.media_metadata[firstMediaId];
+              if (firstMedia?.s) {
+                imageUrl = firstMedia.s.u?.replace(/&amp;/g, "&") || imageUrl;
+                width = firstMedia.s.x || width;
+                height = firstMedia.s.y || height;
+              }
+            }
+            
+            // Fallback for direct image URLs
+            if (!width && !height && /\.(jpe?g|png|webp)$/i.test(p.url)) {
+              imageUrl = p.url;
+              // Set reasonable defaults for direct links
+              width = 1920;
+              height = 1080;
+            }
+            
             return {
               id: p.id,
               title: p.title?.trim() || 'Untitled',
-              url: p.url.replace(/&amp;/g, "&"),
-              width: source.width,
-              height: source.height,
-              preview: p.preview.images[0].resolutions?.[0]?.url?.replace(/&amp;/g, "&") || null,
+              url: imageUrl,
+              width: width || 1920,
+              height: height || 1080,
+              preview: previewUrl,
               subreddit,
               time,
               postType,
@@ -118,6 +188,8 @@ async function fetchExtendedWallpapers({
               score: p.score || 0,
               author: p.author,
               permalink: p.permalink,
+              is_gallery: p.is_gallery || false,
+              num_comments: p.num_comments || 0
             };
           });
 
@@ -150,7 +222,7 @@ async function fetchExtendedWallpapers({
   }
 
   // Execute all requests concurrently with controlled concurrency
-  const concurrencyLimit = 5; // Limit concurrent requests to avoid overwhelming Reddit's API
+  const concurrencyLimit = 3; // Reduced for mobile stability but still parallel
   const results = [];
   
   for (let i = 0; i < fetchTasks.length; i += concurrencyLimit) {
@@ -307,12 +379,12 @@ export async function fetchSavedSubredditsWallpapers(options = {}) {
       ? settings.subreddits
       : ["wallpapers"];
     
-    // Use the optimized function with better defaults
+    // Use the optimized function with better defaults for mobile
     return await fetchExtendedWallpapers({
       subreddits,
       timeRanges: [options.time || "week"],
       postType: "top",
-      limit: options.limit || 50,
+      limit: options.limit || 75, // Increased default limit
       after: options.after || {}
     });
   } catch (error) {
