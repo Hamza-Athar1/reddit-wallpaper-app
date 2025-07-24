@@ -25,6 +25,7 @@ import {
 } from "../../components/favorites-storage";
 import { useColorScheme } from "../../hooks/useColorScheme";
 import { useDebounce } from "../../hooks/useDebounce";
+import ImagePreviewModal from "../ImagePreviewModal";
 
 // Types
 type Wallpaper = {
@@ -128,8 +129,8 @@ const performSearch = async (
 export default function SearchScreen() {
   const window = useWindowDimensions();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  
+  const isDark = colorScheme === "dark";
+
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Wallpaper[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -139,6 +140,7 @@ export default function SearchScreen() {
   const [favorites, setFavorites] = useState<Wallpaper[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Animation states
   const fadeAnim = React.useRef(new Animated.Value(1)).current;
@@ -287,7 +289,7 @@ export default function SearchScreen() {
         handleFavorite={handleFavorite}
         favorites={favorites}
         handleShare={handleShare}
-        onPreview={() => {}} // Implement preview if needed
+        onPreview={setPreviewUrl}
       />
     ),
     [
@@ -305,21 +307,23 @@ export default function SearchScreen() {
     <ThemedView style={styles.container}>
       {/* Search Header */}
       <View style={styles.searchHeader}>
-        <Animated.View style={[
-          styles.searchInputContainer,
-          {
-            shadowColor: isDark ? "#000" : "#333",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-            elevation: 3,
-            backgroundColor: isDark ? "#2a2a2a" : "#ffffff",
-            borderColor: isDark ? "#444" : "#e0e0e0",
-            borderWidth: 1,
-            borderRadius: 12,
-            transform: [{ scale: fadeAnim }],
-          }
-        ]}>
+        <Animated.View
+          style={[
+            styles.searchInputContainer,
+            {
+              shadowColor: isDark ? "#000" : "#333",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 3,
+              backgroundColor: isDark ? "#2a2a2a" : "#ffffff",
+              borderColor: isDark ? "#444" : "#e0e0e0",
+              borderWidth: 1,
+              borderRadius: 12,
+              transform: [{ scale: fadeAnim }],
+            },
+          ]}
+        >
           <Ionicons
             name="search"
             size={20}
@@ -331,8 +335,8 @@ export default function SearchScreen() {
               styles.searchInput,
               {
                 color: isDark ? "#fff" : "#000",
-                backgroundColor: 'transparent',
-              }
+                backgroundColor: "transparent",
+              },
             ]}
             placeholder="Search wallpapers..."
             placeholderTextColor={isDark ? "#888" : "#999"}
@@ -353,7 +357,7 @@ export default function SearchScreen() {
                   {
                     backgroundColor: isDark ? "#444" : "#f0f0f0",
                     borderRadius: 12,
-                  }
+                  },
                 ]}
                 onPress={() => {
                   setSearchQuery("");
@@ -362,10 +366,10 @@ export default function SearchScreen() {
                 }}
                 activeOpacity={0.7}
               >
-                <Ionicons 
-                  name="close" 
-                  size={16} 
-                  color={isDark ? "#ccc" : "#666"} 
+                <Ionicons
+                  name="close"
+                  size={16}
+                  color={isDark ? "#ccc" : "#666"}
                 />
               </TouchableOpacity>
             </Animated.View>
@@ -377,9 +381,11 @@ export default function SearchScreen() {
             styles.filterButton,
             showFilters && styles.filterButtonActive,
             {
-              backgroundColor: showFilters 
-                ? "#0a7ea4" 
-                : (isDark ? "#2a2a2a" : "#ffffff"),
+              backgroundColor: showFilters
+                ? "#0a7ea4"
+                : isDark
+                ? "#2a2a2a"
+                : "#ffffff",
               borderColor: isDark ? "#444" : "#e0e0e0",
               borderWidth: 1,
               shadowColor: isDark ? "#000" : "#333",
@@ -387,7 +393,7 @@ export default function SearchScreen() {
               shadowOpacity: 0.1,
               shadowRadius: 4,
               elevation: 3,
-            }
+            },
           ]}
           onPress={() => {
             setShowFilters(!showFilters);
@@ -402,7 +408,7 @@ export default function SearchScreen() {
           <Ionicons
             name="options"
             size={20}
-            color={showFilters ? "#fff" : (isDark ? "#ccc" : "#0a7ea4")}
+            color={showFilters ? "#fff" : isDark ? "#ccc" : "#0a7ea4"}
           />
         </TouchableOpacity>
       </View>
@@ -485,6 +491,13 @@ export default function SearchScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Image Preview Modal */}
+      <ImagePreviewModal
+        url={previewUrl}
+        visible={!!previewUrl}
+        onClose={() => setPreviewUrl(null)}
+      />
     </ThemedView>
   );
 }

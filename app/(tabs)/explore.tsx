@@ -310,17 +310,7 @@ export default function SettingsScreen() {
         <ThemedText type="subtitle" style={styles.sectionHeader}>
           Subreddits
         </ThemedText>
-        <View
-          style={[
-            styles.row,
-            {
-              marginBottom: 8,
-              position: "relative",
-              zIndex: 9999,
-              elevation: 30,
-            },
-          ]}
-        >
+        <View style={styles.inputContainer}>
           <TextInput
             value={newSubreddit}
             onChangeText={(text) => {
@@ -333,6 +323,7 @@ export default function SettingsScreen() {
               setIsUrlDetected(isUrl);
             }}
             placeholder="Add subreddit (e.g. earthporn) or paste Reddit URL"
+            placeholderTextColor="#888"
             style={[styles.input, isUrlDetected && styles.inputWithUrl]}
             autoCapitalize="none"
             onSubmitEditing={() => addSubreddit()}
@@ -367,10 +358,8 @@ export default function SettingsScreen() {
                 style={[
                   styles.suggestionDropdown,
                   {
-                    maxHeight: 400,
+                    maxHeight: 300, // Reduced max height for better mobile experience
                     minHeight: 80,
-                    bottom: undefined,
-                    top: 44,
                     opacity: fadeAnim,
                     transform: [{ translateY: slideAnim }],
                     shadowColor: "#000",
@@ -390,15 +379,18 @@ export default function SettingsScreen() {
                   style={{ flex: 1 }}
                   contentContainerStyle={{
                     paddingVertical: 4,
-                    flexGrow: 1,
                   }}
                   keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
+                  showsVerticalScrollIndicator={true} // Enable scroll indicator for Android
                   scrollEnabled={true}
                   nestedScrollEnabled={true}
-                  bounces={false}
-                  overScrollMode="never"
+                  bounces={Platform.OS === "ios"} // Only enable bounces on iOS
+                  overScrollMode={
+                    Platform.OS === "android" ? "always" : "never"
+                  } // Enable overscroll on Android
                   removeClippedSubviews={false}
+                  scrollEventThrottle={16} // Improve scroll performance
+                  directionalLockEnabled={true} // Lock scroll direction
                 >
                   {isLoading ? (
                     <View
@@ -622,15 +614,22 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     flexWrap: "wrap",
   },
+  inputContainer: {
+    position: "relative",
+    marginBottom: 16,
+    zIndex: 1000,
+  },
   input: {
-    flex: 1,
+    width: "100%",
     borderWidth: 1,
     borderColor: "#444",
     borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    height: 44,
     backgroundColor: "#181a20", // dark input
     color: "#fff",
+    fontSize: 16,
   },
   inputWithUrl: {
     borderColor: "#0a7ea4",
@@ -702,31 +701,31 @@ const styles = StyleSheet.create({
   },
   suggestionDropdown: {
     position: "absolute",
-    top: 44,
-    left: -12, // Extend beyond container edges
-    right: -12, // Extend beyond container edges
-    backgroundColor: "#000000", // completely opaque black background
+    top: 48, // Position below the input (44px height + 4px margin)
+    left: 0,
+    right: 0,
+    backgroundColor: "#181a20", // Match input background
     borderRadius: 8,
-    // boxShadow for web compatibility, replaces shadow* props
-    boxShadow: "0px 4px 12px rgba(0,0,0,0.8)",
-    elevation: 50, // Maximum elevation
-    zIndex: 99999, // Maximum possible z-index
-    paddingVertical: 4,
-    paddingHorizontal: 12, // Add horizontal padding since we extended width
-    borderWidth: 3,
-    borderColor: "#666",
-    // Ensure complete opacity
-    opacity: 1,
-    // Add a solid backdrop effect
+    borderWidth: 1,
+    borderColor: "#444",
+    borderTopWidth: 0, // Remove top border to connect with input
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    elevation: 10,
+    zIndex: 1001,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    overflow: "hidden",
   },
   suggestionItem: {
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    minHeight: 80, // Increased item height to match calculation
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    backgroundColor: "transparent",
+    minHeight: 56,
   },
   suggestionText: {
     color: "#fff",
@@ -736,21 +735,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#2a3441",
     borderRadius: 6,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginTop: 4,
+    paddingVertical: 8,
+    marginTop: 8,
     borderLeftWidth: 3,
     borderLeftColor: "#0a7ea4",
   },
   urlPreviewText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#0a7ea4",
     fontWeight: "500",
   },
   helperText: {
     fontSize: 12,
     color: "#888",
-    marginTop: 4,
-    marginBottom: 8,
+    marginTop: 8,
     fontStyle: "italic",
+    lineHeight: 16,
   },
 });
