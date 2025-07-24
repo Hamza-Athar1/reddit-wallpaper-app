@@ -348,7 +348,6 @@ export default function HomeScreen() {
       );
     });
   }, [images, filterByResolution, window.width, window.height]);
-  // Memoized render function for FlatList
   const renderItem = useCallback(
     ({ item }: { item: Wallpaper }) => (
       <WallpaperItem
@@ -375,15 +374,6 @@ export default function HomeScreen() {
     ]
   );
 
-  const getItemLayout = useCallback(
-    (_: any, index: number) => ({
-      length: IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 60,
-      offset: (IMAGE_WIDTH * IMAGE_HEIGHT_RATIO + 60) * index,
-      index,
-    }),
-    [IMAGE_WIDTH]
-  );
-
   return (
     <>
       <FlatList
@@ -399,11 +389,10 @@ export default function HomeScreen() {
         }}
         renderItem={renderItem}
         removeClippedSubviews={true}
-        initialNumToRender={8}
-        maxToRenderPerBatch={6}
-        windowSize={10}
-        updateCellsBatchingPeriod={50}
-        getItemLayout={numColumns === 1 ? getItemLayout : undefined}
+        initialNumToRender={6}
+        maxToRenderPerBatch={4}
+        windowSize={8}
+        updateCellsBatchingPeriod={100}
         ListHeaderComponent={
           <>
             <View
@@ -691,17 +680,6 @@ export default function HomeScreen() {
         ListFooterComponent={
           <View style={{ alignItems: "center", marginVertical: 16 }}>
             {loadingMore && <ActivityIndicator style={{ margin: 16 }} />}
-            {/* Debug info for afterMap */}
-            {__DEV__ && (
-              <ThemedText
-                style={{ fontSize: 10, color: "#666", marginBottom: 8 }}
-              >
-                Debug: {JSON.stringify(afterMap)} | Has after tokens:{" "}
-                {Object.values(afterMap)
-                  .some((v) => v != null)
-                  .toString()}
-              </ThemedText>
-            )}
             {/* Show Load More button if we have pagination tokens OR if we have images (fallback) */}
             {(Object.values(afterMap).some((v) => v != null) ||
               (images.length >= 10 && !loading)) &&
